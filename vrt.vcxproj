@@ -19,8 +19,10 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\render\vrt_buffer.cpp" />
     <ClCompile Include="src\render\vrt_debug.cpp" />
     <ClCompile Include="src\render\vrt_device.cpp" />
+    <ClCompile Include="src\render\vrt_image.cpp" />
     <ClCompile Include="src\render\vrt_presentation.cpp" />
     <ClCompile Include="src\render\vrt_shader.cpp" />
     <ClCompile Include="src\vrt.cpp">
@@ -29,7 +31,6 @@
     </ClCompile>
     <ClCompile Include="src\vrt_entry_point.cpp" />
     <ClCompile Include="src\vrt_main.cpp" />
-    <ClCompile Include="vrt_buffer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\render\vrt_render.h" />

@@ -194,7 +194,7 @@ namespace vrt::render
   VOID core::InitializeTargetImage( VOID )
   {
     TargetImage = CreateImage(SwapchainImageExtent.width, SwapchainImageExtent.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    ChangeImageLayout(TargetImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+    ChangeImageLayout(TargetImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL); // reset image layout
 
     VkSamplerCreateInfo SamplerCreateInfo
     {

@@ -13,8 +13,6 @@ struct buffer_data
   float4 CallCount;
 };
 
-RWStructuredBuffer<buffer_data> BufferData : register(u2, space0);
-
 typedef BuiltInTriangleIntersectionAttributes attributes;
 struct ray_payload
 {
@@ -26,7 +24,6 @@ void rrs_main( void )
 {
   float2 FragCoord = (float2)DispatchRaysIndex() / (float2)DispatchRaysDimensions();
 
-  BufferData[0].CallCount += 1.0;
   Target[DispatchRaysIndex().xy] = float4(FragCoord, 0.0, 1.0);
 } /* rrs_main */
 

@@ -10,6 +10,15 @@ namespace vrt
   {
     class core;
 
+    struct resource_base abstract
+    {
+      /* Add resource reference */
+      virtual VOID Grab( VOID ) = 0;
+
+      /* Delete resource reference */
+      virtual VOID Release( VOID ) = 0;
+    }; /* resource_base */
+
     struct buffer
     {
       core *Core = nullptr;
@@ -31,6 +40,7 @@ namespace vrt
       /* Get device address of this buffer. */
       VkDeviceAddress GetDeviceAddress( VOID ) const;
 
+      /* copy buffer to destination */
       VOID CopyTo( buffer &DestinationBuffer );
 
       VOID WriteData( VOID *Data, SIZE_T DataSize );
@@ -38,19 +48,24 @@ namespace vrt
       VOID * MapMemory( VOID );
 
       VOID UnmapMemory( VOID );
-
-      /* buffer destructor */
-      ~buffer( VOID );
     }; /* buffer */
 
     struct image
     {
+      core *Core = nullptr;
+
       VkImage Image;
       VkDeviceMemory Memory;
       VkFormat Format;
       VkImageView ImageView;
       UINT32 MemoryTypeIndex;
       UINT32 Width, Height;
+
+      image( core *Core = nullptr );
+
+      image( image &&Other );
+
+      inline image & operator=( image &&Other ) noexcept;
     }; /* image */
 
     struct rt_shader
@@ -260,6 +275,63 @@ namespace vrt
       /* Presentation pipeline initialization function */
       VOID InitializePresentPipeline( VOID );
 
+      VOID InitializePresentResources( VOID )
+      {
+        InitializeSwapchain();
+        InitializePresentRenderPass();
+        InitializeFramebuffers();
+        InitializeTargetImage();
+      } /* InitializePresent */
+
+      VOID Resize( VOID )
+      {
+        vkDeviceWaitIdle(Device);
+
+        for (VkFramebuffer Framebuffer : Framebuffers)
+          vkDestroyFramebuffer(Device, Framebuffer, nullptr);
+        for (VkImageView ImageView : SwapchainImageViews)
+          vkDestroyImageView(Device, ImageView, nullptr);
+
+        VkSwapchainKHR OldSwapchain = Swapchain;
+
+        InitializeSwapchain();
+        InitializeFramebuffers();
+
+        Destroy(TargetImage);
+        TargetImage = CreateImage(SwapchainImageExtent.width, SwapchainImageExtent.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        ChangeImageLayout(TargetImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL); // reset image layout
+
+        vkDestroySwapchainKHR(Device, OldSwapchain, nullptr);
+
+        VkDescriptorImageInfo DescriptorImageInfo
+        {
+          .sampler = TargetImageSampler,
+          .imageView = TargetImage.ImageView,
+          .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+        };
+
+        VkWriteDescriptorSet RewriteTargetImage
+        {
+          /* VkStructureType               */ .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+          /* const void*                   */ .pNext = nullptr,
+          /* VkDescriptorSet               */ .dstSet = VK_NULL_HANDLE,
+          /* uint32_t                      */ .dstBinding = 0,
+          /* uint32_t                      */ .dstArrayElement = 0,
+          /* uint32_t                      */ .descriptorCount = 1,
+          /* VkDescriptorType              */ .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+          /* const VkDescriptorImageInfo*  */ .pImageInfo = &DescriptorImageInfo,
+          /* const VkDescriptorBufferInfo* */ .pBufferInfo = 0,
+          /* const VkBufferView*           */ .pTexelBufferView = 0,
+        };
+
+        RewriteTargetImage.dstSet = PresentDescriptorSet;
+        vkUpdateDescriptorSets(Device, 1, &RewriteTargetImage, 0, nullptr);
+
+        // Rewrite descriptor sets
+        RewriteTargetImage.dstSet = DescriptorSet;
+        vkUpdateDescriptorSets(Device, 1, &RewriteTargetImage, 0, nullptr);
+      } /* Resize */
+
       VOID InitializeCommandPools( VOID )
       {
         VkCommandPoolCreateInfo CreateInfo
@@ -289,169 +361,11 @@ namespace vrt
       } /* InitializeCommandPools */
 
 
-      image CreateImage( UINT32 Width, UINT32 Height, VkFormat Format, VkImageTiling Tiling, VkImageUsageFlags UsageFlags, VkMemoryPropertyFlags MemoryProperties )
-      {
-        VkImageCreateInfo CreateInfo
-        {
-          /* VkStructureType       */ .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-          /* const void*           */ .pNext = nullptr,
-          /* VkImageCreateFlags    */ .flags = 0,
-          /* VkImageType           */ .imageType = VK_IMAGE_TYPE_2D,
-          /* VkFormat              */ .format = Format,
-          /* VkExtent3D            */ .extent = VkExtent3D {Width, Height, 1},
-          /* uint32_t              */ .mipLevels = 1,
-          /* uint32_t              */ .arrayLayers = 1,
-          /* VkSampleCountFlagBits */ .samples = VK_SAMPLE_COUNT_1_BIT,
-          /* VkImageTiling         */ .tiling = Tiling,
-          /* VkImageUsageFlags     */ .usage = UsageFlags,
-          /* VkSharingMode         */ // .sharingMode = VK_SHARING_MODE_CONCURRENT,
-          /* uint32_t              */ // .queueFamilyIndexCount = static_cast<UINT32>(std::size(QueueFamilies)),
-          /* const uint32_t*       */ // .pQueueFamilyIndices = QueueFamilies,
-          /* VkImageLayout         */ .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        };
+      image CreateImage( UINT32 Width, UINT32 Height, VkFormat Format, VkImageTiling Tiling, VkImageUsageFlags UsageFlags, VkMemoryPropertyFlags MemoryProperties );
 
-        if (QueueFamilies.Unique.size() != 1)
-        {
-          CreateInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
-          CreateInfo.queueFamilyIndexCount = static_cast<UINT32>(QueueFamilies.Unique.size());
-          CreateInfo.pQueueFamilyIndices = QueueFamilies.Unique.data();
-        }
-        else
-        {
-          CreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-          CreateInfo.queueFamilyIndexCount = 0;
-          CreateInfo.pQueueFamilyIndices = nullptr;
-        }
+      VOID ChangeImageLayout( image &Image, VkImageLayout OldLayout, VkImageLayout NewLayout );
 
-        image Image;
-
-        Image.Format = Format;
-        Image.Width = Width;
-        Image.Height = Height;
-        utils::AssertResult(vkCreateImage(Device, &CreateInfo, nullptr, &Image.Image));
-
-        VkMemoryRequirements MemoryRequirements;
-        vkGetImageMemoryRequirements(Device, Image.Image, &MemoryRequirements);
-
-        VkMemoryAllocateInfo AllocInfo
-        {
-          .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-          .pNext = nullptr,
-          .allocationSize = MemoryRequirements.size,
-          .memoryTypeIndex = FindMemoryType(MemoryRequirements.memoryTypeBits, MemoryProperties),
-        };
-
-        utils::AssertResult(vkAllocateMemory(Device, &AllocInfo, nullptr, &Image.Memory));
-
-        vkBindImageMemory(Device, Image.Image, Image.Memory, 0);
-
-        Image.MemoryTypeIndex = AllocInfo.memoryTypeIndex;
-        Image.ImageView = CreateImageView(Image.Image, Image.Format);
-
-        return Image;
-      } /* CreateImage */
-
-
-      VOID ChangeImageLayout( image &Image, VkImageLayout OldLayout, VkImageLayout NewLayout )
-      {
-        VkCommandBuffer TransferCommandBuffer = BeginTransfer();
-
-        VkImageMemoryBarrier ImageMemoryBarrier
-        {
-          /* VkStructureType         */ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-          /* const void*             */ .pNext = nullptr,
-          /* VkAccessFlags           */ .srcAccessMask = 0,
-          /* VkAccessFlags           */ .dstAccessMask = 0,
-          /* VkImageLayout           */ .oldLayout = OldLayout,
-          /* VkImageLayout           */ .newLayout = NewLayout,
-          /* uint32_t                */ .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-          /* uint32_t                */ .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-          /* VkImage                 */ .image = Image.Image,
-          /* VkImageSubresourceRange */ .subresourceRange = VkImageSubresourceRange
-          {
-            /* VkImageAspectFlags */ .aspectMask = (VkImageAspectFlags)(NewLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT),
-            /* uint32_t           */ .baseMipLevel = 0,
-            /* uint32_t           */ .levelCount = 1,
-            /* uint32_t           */ .baseArrayLayer = 0,
-            /* uint32_t           */ .layerCount = 1,
-          },
-        };
-
-        VkPipelineStageFlags SourceStageFlags = 0, DestinationStageFlags = 0;
-
-        if (OldLayout == VK_IMAGE_LAYOUT_UNDEFINED && (NewLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL || NewLayout == VK_IMAGE_LAYOUT_GENERAL))
-        {
-          ImageMemoryBarrier.srcAccessMask = 0;
-          ImageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-
-          SourceStageFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-          DestinationStageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        }
-        else if (OldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && NewLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-        {
-          ImageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-          ImageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-          SourceStageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
-          DestinationStageFlags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-        }
-        else if (OldLayout == VK_IMAGE_LAYOUT_UNDEFINED && NewLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-        {
-          ImageMemoryBarrier.srcAccessMask = 0;
-          ImageMemoryBarrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-
-          SourceStageFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-          DestinationStageFlags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-        }
-        else if (OldLayout == VK_IMAGE_LAYOUT_UNDEFINED && NewLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
-        {
-          ImageMemoryBarrier.srcAccessMask = 0;
-          ImageMemoryBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-          SourceStageFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-          DestinationStageFlags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-        }
-
-        if (NewLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-          ImageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-
-        vkCmdPipelineBarrier
-        (
-          TransferCommandBuffer,
-          SourceStageFlags, DestinationStageFlags, 0,
-          0, nullptr,
-          0, nullptr,
-          1, &ImageMemoryBarrier
-        );
-
-        EndTransfer(TransferCommandBuffer);
-      } /* ChangeImageLayout */
-
-      VkImageView CreateImageView( VkImage Image, VkFormat ImageFormat )
-      {
-        VkImageViewCreateInfo CreateInfo
-        {
-          /* VkStructureType         */ .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-          /* const void*             */ .pNext = nullptr,
-          /* VkImageViewCreateFlags  */ .flags = 0,
-          /* VkImage                 */ .image = Image,
-          /* VkImageViewType         */ .viewType = VK_IMAGE_VIEW_TYPE_2D,
-          /* VkFormat                */ .format = ImageFormat,
-          /* VkComponentMapping      */ .components = VkComponentMapping { VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY },
-          /* VkImageSubresourceRange */ .subresourceRange = VkImageSubresourceRange
-          {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .baseMipLevel = 0,
-            .levelCount = 1,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-          },
-        };
-
-        VkImageView ImageView = VK_NULL_HANDLE;
-        utils::AssertResult(vkCreateImageView(Device, &CreateInfo, nullptr, &ImageView), "error creating image view");
-        return ImageView;
-      } /* CreateImageView */
+      VkImageView CreateImageView( VkImage Image, VkFormat ImageFormat );
 
       VkCommandBuffer CreateCommandBuffer( VkCommandPool CommandPool )
       {
@@ -483,65 +397,7 @@ namespace vrt
         return UINT32_MAX;
       } /* findMemoryType */
 
-      buffer CreateBuffer( VkDeviceSize Size, VkBufferUsageFlags Usage, VkMemoryPropertyFlags MemoryPropertyFlags )
-      {
-        buffer Buffer {this};
-
-        VkBufferCreateInfo CreateInfo
-        {
-          .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-          .pNext = nullptr,
-          .flags = 0,
-          .size = Size,
-          .usage = Usage,
-        };
-
-        if (QueueFamilies.Unique.size() == 1)
-        {
-          CreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-          CreateInfo.queueFamilyIndexCount = 0;
-          CreateInfo.pQueueFamilyIndices = nullptr;
-        }
-        else
-        {
-          CreateInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
-          CreateInfo.queueFamilyIndexCount = static_cast<UINT32>(QueueFamilies.Unique.size());
-          CreateInfo.pQueueFamilyIndices = QueueFamilies.Unique.data();
-        }
-
-        utils::AssertResult(vkCreateBuffer(Device, &CreateInfo, nullptr, &Buffer.Buffer), "error creating buffer");
-
-        VkMemoryRequirements MemoryRequirements;
-        vkGetBufferMemoryRequirements(Device, Buffer.Buffer, &MemoryRequirements);
-        Buffer.MemoryTypeIndex = FindMemoryType(MemoryRequirements.memoryTypeBits, MemoryPropertyFlags);
-        Buffer.Size = MemoryRequirements.size;
-
-        // VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT 
-        VkMemoryAllocateFlagsInfo AllocateFlagsInfo
-        {
-          .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
-          .pNext = nullptr,
-          .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
-          .deviceMask = 0,
-        };
-
-        VkMemoryAllocateInfo AllocateInfo
-        {
-          .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-          .pNext = &AllocateFlagsInfo,
-          .allocationSize = Buffer.Size,
-          .memoryTypeIndex = Buffer.MemoryTypeIndex,
-        };
-
-        utils::AssertResult(vkAllocateMemory(Device, &AllocateInfo, nullptr, &Buffer.Memory), "error allocating memory");
-
-        vkBindBufferMemory(Device, Buffer.Buffer, Buffer.Memory, 0);
-
-        return std::move(Buffer);
-      } /* CreateBuffer */
-
-
-
+      buffer CreateBuffer( VkDeviceSize Size, VkBufferUsageFlags Usage, VkMemoryPropertyFlags MemoryPropertyFlags );
 
       VkCommandBuffer BeginSingleTimeCommands( VOID )
       {
@@ -649,6 +505,22 @@ namespace vrt
         if (Shader.Compute     != VK_NULL_HANDLE) vkDestroyShaderModule(Device, Shader.Compute,     nullptr);
       } /* Destroy */
 
+      VOID Destroy( image &Image );
+
+      VOID Destroy( buffer &Buffer );
+
+      image TargetImage;
+      VkSampler TargetImageSampler = VK_NULL_HANDLE;
+      VkRenderPass PresentRenderPass = VK_NULL_HANDLE;
+      VkDescriptorSetLayout PresentDescriptorSetLayout = VK_NULL_HANDLE;
+      VkDescriptorSet PresentDescriptorSet = VK_NULL_HANDLE;
+      VkDescriptorPool PresentDescriptorPool = VK_NULL_HANDLE;
+      VkPipelineLayout PresentPipelineLayout = VK_NULL_HANDLE;
+      VkPipeline PresentPipeline = VK_NULL_HANDLE;
+      VkCommandBuffer GraphicsCommandBuffer = VK_NULL_HANDLE;
+      VkFence InFlightFence = VK_NULL_HANDLE;
+      VkSemaphore ImageAvailableSemaphore = VK_NULL_HANDLE, RenderFinishedSemaphore = VK_NULL_HANDLE;
+
       VkPipeline Pipeline = VK_NULL_HANDLE;
       VkPipelineLayout PipelineLayout = VK_NULL_HANDLE;
       VkDescriptorSetLayout DescriptorSetLayout = VK_NULL_HANDLE;
@@ -663,22 +535,8 @@ namespace vrt
       buffer TLASStorageBuffer;
       VkAccelerationStructureKHR TLAS = VK_NULL_HANDLE;
 
-      buffer SBTStorageBuffer = VK_NULL_HANDLE;
-      VkCommandBuffer GraphicsCommandBuffer = VK_NULL_HANDLE;
-      VkFence InFlightFence = VK_NULL_HANDLE;
-      VkSemaphore ImageAvailableSemaphore = VK_NULL_HANDLE, RenderFinishedSemaphore = VK_NULL_HANDLE;
-      UINT32 SBTAlignedGroupSize = 0;
-
-      buffer TestBuffer;
-
-      image TargetImage;
-      VkSampler TargetImageSampler = VK_NULL_HANDLE;
-      VkRenderPass PresentRenderPass = VK_NULL_HANDLE;
-      VkDescriptorSetLayout PresentDescriptorSetLayout = VK_NULL_HANDLE;
-      VkDescriptorSet PresentDescriptorSet = VK_NULL_HANDLE;
-      VkDescriptorPool PresentDescriptorPool = VK_NULL_HANDLE;
-      VkPipelineLayout PresentPipelineLayout = VK_NULL_HANDLE;
-      VkPipeline PresentPipeline = VK_NULL_HANDLE;
+      buffer SBTStorageBuffer;
+      SIZE_T SBTAlignedGroupSize = 0;
 
 
       VOID TestInitPrimitiveData( VOID )
@@ -775,6 +633,7 @@ namespace vrt
         VkAccelerationStructureBuildRangeInfoKHR *PtrRangeInfo = &RangeInfo;
         vkCmdBuildAccelerationStructuresKHR(CommandBuffer, 1, &GeometryBuildInfo, &PtrRangeInfo);
         EndSingleTimeCommands(CommandBuffer);
+        Destroy(ScratchBuffer);
       } /* TestInitBLAS */
 
       VOID TestInitTLAS( VOID )
@@ -899,6 +758,7 @@ namespace vrt
         VkCommandBuffer CommandBuffer = BeginSingleTimeCommands();
         vkCmdBuildAccelerationStructuresKHR(CommandBuffer, 1, &BuildGeometryInfo, &PtrRangeInfo);
         EndSingleTimeCommands(CommandBuffer);
+        Destroy(ScratchBuffer);
       } /* TestInitTLAS */
 
       VkShaderModule CreateShaderModule( std::span<const UINT32> SPIRVCode )
@@ -920,8 +780,6 @@ namespace vrt
 
       VOID TestInitPipeline( VOID )
       {
-        TestBuffer = CreateBuffer(sizeof(FLOAT) * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
         VkDescriptorSetLayoutBinding DescriptorSetLayoutBindings[]
         {
           {
@@ -934,13 +792,6 @@ namespace vrt
           {
             .binding = 1,
             .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-            .descriptorCount = 1,
-            .stageFlags = VK_SHADER_STAGE_ALL,
-            .pImmutableSamplers = nullptr,
-          },
-          {
-            .binding = 2,
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
             .descriptorCount = 1,
             .stageFlags = VK_SHADER_STAGE_ALL,
             .pImmutableSamplers = nullptr,
@@ -962,7 +813,6 @@ namespace vrt
         {
           { .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, },
           { .type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, .descriptorCount = 1, },
-          { .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, }
         };
 
         VkDescriptorPoolCreateInfo DescriptorPoolCreateInfo
@@ -994,12 +844,6 @@ namespace vrt
           .pNext = nullptr,
           .accelerationStructureCount = 1,
           .pAccelerationStructures = &TLAS,
-        };
-        VkDescriptorBufferInfo StorageBufferBindingInfo
-        {
-          .buffer = TestBuffer.Buffer,
-          .offset = 0,
-          .range = TestBuffer.Size,
         };
         VkDescriptorImageInfo DescriptorSetWriteImageInfo
         {
@@ -1036,18 +880,6 @@ namespace vrt
             /* const VkDescriptorBufferInfo* */ .pBufferInfo = 0,
             /* const VkBufferView*           */ .pTexelBufferView = 0,
           },
-          {
-            /* VkStructureType               */ .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            /* const void*                   */ .pNext = &DescriptorSetAccelerationStructure,
-            /* VkDescriptorSet               */ .dstSet = DescriptorSet,
-            /* uint32_t                      */ .dstBinding = 2,
-            /* uint32_t                      */ .dstArrayElement = 0,
-            /* uint32_t                      */ .descriptorCount = 1,
-            /* VkDescriptorType              */ .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            /* const VkDescriptorImageInfo*  */ .pImageInfo = 0,
-            /* const VkDescriptorBufferInfo* */ .pBufferInfo = &StorageBufferBindingInfo,
-            /* const VkBufferView*           */ .pTexelBufferView = 0,
-          }
         };
 
         vkUpdateDescriptorSets(Device, static_cast<UINT32>(std::size(DescriptorSetWrites)), DescriptorSetWrites, 0, nullptr);
@@ -1167,6 +999,22 @@ namespace vrt
         SBTStorageBuffer.UnmapMemory();
       } /* TestInitPipeline */
 
+      VOID TestClose( VOID )
+      {
+        vkDestroyAccelerationStructureKHR(Device, TLAS, nullptr);
+        vkDestroyAccelerationStructureKHR(Device, BLAS, nullptr);
+        vkDestroyDescriptorPool(Device, DescriptorPool, nullptr);
+        vkDestroyPipeline(Device, Pipeline, nullptr);
+        vkDestroyPipelineLayout(Device, PipelineLayout, nullptr);
+        vkDestroyDescriptorSetLayout(Device, DescriptorSetLayout, nullptr);
+
+        Destroy(VertexBuffer);
+        Destroy(BLASStorageBuffer);
+        Destroy(InstanceBuffer);
+        Destroy(TLASStorageBuffer);
+        Destroy(SBTStorageBuffer);
+      } /* TestClose */
+
       VOID Initialize( SDL_Window *RenderWindow )
       {
         Window = RenderWindow;
@@ -1178,12 +1026,8 @@ namespace vrt
         InitializeDevice();
         InitializeCommandPools();
 
-        InitializeSwapchain();
-        InitializePresentRenderPass();
-        InitializeFramebuffers();
-        InitializeTargetImage();
+        InitializePresentResources();
         InitializePresentPipeline();
-
 
         // First-triangle functions
         TestInitPrimitiveData();
@@ -1213,12 +1057,10 @@ namespace vrt
         GraphicsCommandBuffer = CreateCommandBuffer(GraphicsCommandPool);
       } /* Initialize */
 
+
+
       VOID Render( VOID )
       {
-        VOID *TestDataView = TestBuffer.MapMemory();
-        std::cout << *(FLOAT *)TestDataView << "\n";
-        TestBuffer.UnmapMemory();
-
         // wait for rendering ended
         VkFence RenderingFences[] {InFlightFence};
         vkWaitForFences(Device, 1, &InFlightFence, VK_TRUE, UINT64_MAX);
@@ -1231,15 +1073,9 @@ namespace vrt
         if (result != VK_SUCCESS)
           return;
 
-
         vkResetCommandBuffer(GraphicsCommandBuffer, 0);
 
         /* Write output image to descriptor sets */
-
-        FLOAT *TestData = reinterpret_cast<FLOAT *>(TestBuffer.MapMemory());
-        std::cout << *TestData << "\n";
-        *TestData = 0;
-        TestBuffer.UnmapMemory();
 
         VkCommandBufferBeginInfo CommandBufferBeginInfo
         {
@@ -1294,6 +1130,7 @@ namespace vrt
         };
         vkCmdPipelineBarrier(GraphicsCommandBuffer, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &MemoryBarrier, 0, nullptr, 0, nullptr);
 
+        // Drawing image to target
         VkClearValue ClearValue { 0.0f, 1.0f, 0.0f, 1.0f };
 
         VkRenderPassBeginInfo BeginInfo
@@ -1361,10 +1198,25 @@ namespace vrt
       {
         vkDeviceWaitIdle(Device);
 
+        TestClose();
+
+        Destroy(TargetImage);
+        vkDestroySampler(Device, TargetImageSampler, nullptr);
+        vkDestroyRenderPass(Device, PresentRenderPass, nullptr);
+        vkDestroyDescriptorSetLayout(Device, PresentDescriptorSetLayout, nullptr);
+        vkDestroyDescriptorPool(Device, PresentDescriptorPool, nullptr);
+        vkDestroyPipelineLayout(Device, PresentPipelineLayout, nullptr);
+        vkDestroyPipeline(Device, PresentPipeline, nullptr);
+        vkDestroyFence(Device, InFlightFence, nullptr);
+        vkDestroySemaphore(Device, ImageAvailableSemaphore, nullptr);
+        vkDestroySemaphore(Device, RenderFinishedSemaphore, nullptr);
+
         VkCommandPool CommandPools[] {GraphicsCommandPool, TransferCommandPool, ComputeCommandPool};
         for (VkCommandPool CommandPool : CommandPools)
           vkDestroyCommandPool(Device, CommandPool, nullptr);
 
+        for (VkFramebuffer Framebuffer : Framebuffers)
+          vkDestroyFramebuffer(Device, Framebuffer, nullptr);
         for (VkImageView ImageView : SwapchainImageViews)
           vkDestroyImageView(Device, ImageView, nullptr);
         vkDestroySwapchainKHR(Device, Swapchain, nullptr);

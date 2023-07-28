@@ -147,7 +147,7 @@ namespace vrt
   {
     scene *Scene = nullptr;
     SDL_Window *Window = nullptr;
-    struct { INT Width, Height; } OldWindowSize;
+    struct { INT Width, Height; } OldWindowSize = {30, 30};
 
   public:
     std::span<const CHAR *> ConsoleArguments;
@@ -221,7 +221,7 @@ namespace vrt
             break;
 
           case SDL_WINDOWEVENT:
-            // Render.Resize();
+            Render.Resize();
             break;
           }
         }

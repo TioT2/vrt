@@ -28,10 +28,13 @@
     <ClCompile Include="src\render\vrt_presentation.cpp">
       <Filter>Source Files\Render</Filter>
     </ClCompile>
-    <ClCompile Include="vrt_buffer.cpp">
+    <ClCompile Include="src\render\vrt_shader.cpp">
       <Filter>Source Files\Render</Filter>
     </ClCompile>
-    <ClCompile Include="src\render\vrt_shader.cpp">
+    <ClCompile Include="src\render\vrt_buffer.cpp">
+      <Filter>Source Files\Render</Filter>
+    </ClCompile>
+    <ClCompile Include="src\render\vrt_image.cpp">
       <Filter>Source Files\Render</Filter>
     </ClCompile>
   </ItemGroup>

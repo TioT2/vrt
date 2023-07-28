@@ -2,6 +2,63 @@
 
 namespace vrt::render
 {
+  buffer core::CreateBuffer( VkDeviceSize Size, VkBufferUsageFlags Usage, VkMemoryPropertyFlags MemoryPropertyFlags )
+  {
+    buffer Buffer {this};
+
+    VkBufferCreateInfo CreateInfo
+    {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = 0,
+      .size = Size,
+      .usage = Usage,
+    };
+
+    if (QueueFamilies.Unique.size() == 1)
+    {
+      CreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+      CreateInfo.queueFamilyIndexCount = 0;
+      CreateInfo.pQueueFamilyIndices = nullptr;
+    }
+    else
+    {
+      CreateInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
+      CreateInfo.queueFamilyIndexCount = static_cast<UINT32>(QueueFamilies.Unique.size());
+      CreateInfo.pQueueFamilyIndices = QueueFamilies.Unique.data();
+    }
+
+    utils::AssertResult(vkCreateBuffer(Device, &CreateInfo, nullptr, &Buffer.Buffer), "error creating buffer");
+
+    VkMemoryRequirements MemoryRequirements;
+    vkGetBufferMemoryRequirements(Device, Buffer.Buffer, &MemoryRequirements);
+    Buffer.MemoryTypeIndex = FindMemoryType(MemoryRequirements.memoryTypeBits, MemoryPropertyFlags);
+    Buffer.Size = MemoryRequirements.size;
+
+    // VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT 
+    VkMemoryAllocateFlagsInfo AllocateFlagsInfo
+    {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+      .pNext = nullptr,
+      .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
+      .deviceMask = 0,
+    };
+
+    VkMemoryAllocateInfo AllocateInfo
+    {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .pNext = &AllocateFlagsInfo,
+      .allocationSize = Buffer.Size,
+      .memoryTypeIndex = Buffer.MemoryTypeIndex,
+    };
+
+    utils::AssertResult(vkAllocateMemory(Device, &AllocateInfo, nullptr, &Buffer.Memory), "error allocating memory");
+
+    vkBindBufferMemory(Device, Buffer.Buffer, Buffer.Memory, 0);
+
+    return std::move(Buffer);
+  } /* CreateBuffer */
+
   buffer::buffer( core *Core ) : Core(Core)
   {
 
@@ -52,6 +109,7 @@ namespace vrt::render
     StagingBuffer.UnmapMemory();
 
     StagingBuffer.CopyTo(*this);
+    Core->Destroy(StagingBuffer);
   } /* WriteData */
 
 
@@ -67,12 +125,9 @@ namespace vrt::render
     vkUnmapMemory(Core->Device, Memory);
   } /* UnmapMemory */
 
-  buffer::~buffer( VOID )
+  VOID core::Destroy( buffer &Buffer )
   {
-    if (Size != 0)
-    {
-      vkFreeMemory(Core->Device, Memory, nullptr);
-      vkDestroyBuffer(Core->Device, Buffer, nullptr);
-    }
-  } /* ~buffer */
+    vkFreeMemory(Device, Buffer.Memory, nullptr);
+    vkDestroyBuffer(Device, Buffer.Buffer, nullptr);
+  } /* buffer */
 } /* namespace vrt::render */

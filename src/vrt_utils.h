@@ -292,10 +292,10 @@ namespace vrt
 
     class splitter
     {
-      std::string_view Str;
-      CHAR Symbol;
-      std::size_t begin;
-      std::size_t end;
+      std::string_view Str = "";
+      CHAR Symbol = 0;
+      std::size_t Begin = 0;
+      std::size_t End = 0;
     public:
 
       splitter( VOID )
@@ -305,23 +305,23 @@ namespace vrt
 
       splitter( std::string_view Str, CHAR Symbol ) : Str(Str), Symbol(Symbol)
       {
-        begin = 0;
-        end = Str.find(Symbol, 0);
+        Begin = 0;
+        End = Str.find(Symbol, 0);
       } /* splitter */
 
       std::string_view Get( VOID )
       {
         std::string_view View;
 
-        if (begin != std::string::npos)
+        if (Begin != std::string::npos)
         {
-          View = {&Str[begin], &Str[end]};
+          View = {&Str[Begin], &Str[End]};
 
-          begin = end + 1;
-          end = Str.find(Symbol, begin);
+          Begin = End + 1;
+          End = Str.find(Symbol, Begin);
 
-          if (end == std::string::npos)
-            end = View.length();
+          if (End == std::string::npos)
+            End = View.length();
         }
 
         return View;
