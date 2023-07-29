@@ -1,8 +1,8 @@
 #include "vrt.h"
 
-namespace vrt::render
+namespace vrt::render::core
 {
-  UINT32 core::RatePhysicalDevice( VkPhysicalDevice PhysicalDevice )
+  UINT32 kernel::RatePhysicalDevice( VkPhysicalDevice PhysicalDevice )
   {
     VkPhysicalDeviceRayTracingPipelineFeaturesKHR RayTracingPipelineFeatures
     {
@@ -20,7 +20,7 @@ namespace vrt::render
     return Features.features.tessellationShader * Features.features.geometryShader * RayTracingPipelineFeatures.rayTracingPipeline;
   } /* RatePhysicalDevice */
 
-  VOID core::ChoosePhysicalDevice( VOID )
+  VOID kernel::ChoosePhysicalDevice( VOID )
   {
     UINT32 PhysicalDeviceCount = 0;
     vkEnumeratePhysicalDevices(Instance, &PhysicalDeviceCount, nullptr);
@@ -78,7 +78,7 @@ namespace vrt::render
     );
   } /* ChoosePhysicalDevice */
 
-  VOID core::InitializeDevice( VOID )
+  VOID kernel::InitializeDevice( VOID )
   {
     ChoosePhysicalDevice();
 

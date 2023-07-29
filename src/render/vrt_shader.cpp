@@ -3,18 +3,18 @@
 #include <windows.h>
 #include <dxc/dxcapi.h>
 
-namespace vrt::render
+namespace vrt::render::core
 {
   VkShaderModule & rt_shader::GetModule( module_type Type )
   {
     switch(Type)
     {
-    case vrt::render::rt_shader::module_type::RAYGEN       : return Raygen      ;
-    case vrt::render::rt_shader::module_type::ANY_HIT      : return AnyHit      ;
-    case vrt::render::rt_shader::module_type::CLOSEST_HIT  : return ClosestHit  ;
-    case vrt::render::rt_shader::module_type::MISS         : return Miss        ;
-    case vrt::render::rt_shader::module_type::INTERSECTION : return Intersection;
-    default                                             : return Callable    ;
+    case rt_shader::module_type::RAYGEN       : return Raygen      ;
+    case rt_shader::module_type::ANY_HIT      : return AnyHit      ;
+    case rt_shader::module_type::CLOSEST_HIT  : return ClosestHit  ;
+    case rt_shader::module_type::MISS         : return Miss        ;
+    case rt_shader::module_type::INTERSECTION : return Intersection;
+    default                                   : return Callable    ;
     }
   } /* GetModule */
 
@@ -33,7 +33,7 @@ namespace vrt::render
   } /* GetModuleTypeName */
 
 
-  rt_shader core::LoadRTShader( std::string_view Name )
+  rt_shader kernel::LoadRTShader( std::string_view Name )
   {
     std::wstring WstringName {Name.begin(), Name.end()};
     std::wstring FolderPath = std::format(L"./{}/", WstringName.substr(0, WstringName.find_last_of('/')));
@@ -262,7 +262,7 @@ namespace vrt::render
     return EntryPoints[static_cast<SIZE_T>(Type)];
   } /* GetModuleTypeName */
 
-  shader core::LoadShader( std::string_view Name )
+  shader kernel::LoadShader( std::string_view Name )
   {
     std::wstring WstringName {Name.begin(), Name.end()};
     std::wstring FolderPath = std::format(L"./{}/", WstringName.substr(0, WstringName.find_last_of('/')));

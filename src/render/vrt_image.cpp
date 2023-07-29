@@ -1,8 +1,8 @@
 #include "vrt.h"
 
-namespace vrt::render
+namespace vrt::render::core
 {
-  image core::CreateImage( UINT32 Width, UINT32 Height, VkFormat Format, VkImageTiling Tiling, VkImageUsageFlags UsageFlags, VkMemoryPropertyFlags MemoryProperties )
+  image kernel::CreateImage( UINT32 Width, UINT32 Height, VkFormat Format, VkImageTiling Tiling, VkImageUsageFlags UsageFlags, VkMemoryPropertyFlags MemoryProperties )
   {
     VkImageCreateInfo CreateInfo
     {
@@ -65,7 +65,7 @@ namespace vrt::render
   } /* CreateImage */
 
 
-  VOID core::ChangeImageLayout( image &Image, VkImageLayout OldLayout, VkImageLayout NewLayout )
+  VOID kernel::ChangeImageLayout( image &Image, VkImageLayout OldLayout, VkImageLayout NewLayout )
   {
     VkCommandBuffer TransferCommandBuffer = BeginTransfer();
 
@@ -140,7 +140,7 @@ namespace vrt::render
     EndTransfer(TransferCommandBuffer);
   } /* ChangeImageLayout */
 
-  VkImageView core::CreateImageView( VkImage Image, VkFormat ImageFormat )
+  VkImageView kernel::CreateImageView( VkImage Image, VkFormat ImageFormat )
   {
     VkImageViewCreateInfo CreateInfo
     {
@@ -166,7 +166,7 @@ namespace vrt::render
     return ImageView;
   } /* CreateImageView */
 
-  image::image( core *Core ) : Core(Core)
+  image::image( kernel *Kernel ) : Kernel(Kernel)
   {
 
   } /* image */
@@ -178,7 +178,7 @@ namespace vrt::render
 
   inline image & image::operator=( image &&Other ) noexcept
   {
-    std::swap(Core, Other.Core);
+    std::swap(Kernel, Other.Kernel);
     std::swap(Image, Other.Image);
     std::swap(Memory, Other.Memory);
     std::swap(Format, Other.Format);
@@ -190,7 +190,7 @@ namespace vrt::render
     return *this;
   } /* operator= */
 
-  VOID core::Destroy( image &Image )
+  VOID kernel::Destroy( image &Image )
   {
     vkDestroyImageView(Device, Image.ImageView, nullptr);
     vkDestroyImage(Device, Image.Image, nullptr);

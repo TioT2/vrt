@@ -182,6 +182,16 @@ namespace vrt
           return *Data;
         } /* operator component* */
 
+        operator VkTransformMatrixKHR( VOID ) const
+        {
+          return VkTransformMatrixKHR
+          {{{
+            {Data[0][0], Data[1][0], Data[2][0], Data[3][0]},
+            {Data[0][1], Data[1][1], Data[2][1], Data[3][1]},
+            {Data[0][2], Data[1][2], Data[2][2], Data[3][2]},
+          }}};
+        } /* operator VkTransformMatrixKHR */
+
         mat4 Transpose( VOID ) const
         {
           return mat4<component>(

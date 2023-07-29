@@ -1,8 +1,8 @@
 #include "vrt.h"
 
-namespace vrt::render
+namespace vrt::render::core
 {
-  buffer core::CreateBuffer( VkDeviceSize Size, VkBufferUsageFlags Usage, VkMemoryPropertyFlags MemoryPropertyFlags )
+  buffer kernel::CreateBuffer( VkDeviceSize Size, VkBufferUsageFlags Usage, VkMemoryPropertyFlags MemoryPropertyFlags )
   {
     buffer Buffer {this};
 
@@ -59,10 +59,10 @@ namespace vrt::render
     return std::move(Buffer);
   } /* CreateBuffer */
 
-  buffer::buffer( core *Core ) : Core(Core)
+  buffer::buffer( kernel *Kernel ) : Kernel(Kernel)
   {
 
-  } /* Core */
+  } /* Kernel */
 
   buffer::buffer( const buffer &OtherConst )
   {
@@ -71,7 +71,7 @@ namespace vrt::render
 
   buffer & buffer::operator=( buffer &&Other ) noexcept
   {
-    std::swap(Core, Other.Core);
+    std::swap(Kernel, Other.Kernel);
     std::swap(Buffer, Other.Buffer);
     std::swap(Memory, Other.Memory);
     std::swap(Size, Other.Size);
@@ -89,43 +89,43 @@ namespace vrt::render
       .buffer = Buffer,
     };
 
-    return vkGetBufferDeviceAddress(Core->Device, &DeviceAddressInfo);
+    return vkGetBufferDeviceAddress(Kernel->Device, &DeviceAddressInfo);
   } /* GetDeviceAddress */
 
   VOID buffer::CopyTo( buffer &DestinationBuffer )
   {
-    VkCommandBuffer CommandBuffer = Core->BeginTransfer();
+    VkCommandBuffer CommandBuffer = Kernel->BeginTransfer();
     VkBufferCopy Copy { 0, 0, std::min(Size, DestinationBuffer.Size) };
     vkCmdCopyBuffer(CommandBuffer, Buffer, DestinationBuffer.Buffer, 1, &Copy);
-    Core->EndTransfer(CommandBuffer);
+    Kernel->EndTransfer(CommandBuffer);
   } /* CopyTo */
 
 
-  VOID buffer::WriteData( VOID *Data, SIZE_T DataSize )
+  VOID buffer::WriteData( const VOID *Data, SIZE_T DataSize )
   {
-    buffer StagingBuffer = Core->CreateBuffer(DataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    buffer StagingBuffer = Kernel->CreateBuffer(DataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
     std::memcpy(StagingBuffer.MapMemory(), Data, DataSize);
     StagingBuffer.UnmapMemory();
 
     StagingBuffer.CopyTo(*this);
-    Core->Destroy(StagingBuffer);
+    Kernel->Destroy(StagingBuffer);
   } /* WriteData */
 
 
   VOID * buffer::MapMemory( VOID )
   {
     VOID *MemoryMap = nullptr;
-    vkMapMemory(Core->Device, Memory, 0, Size, 0, &MemoryMap);
+    vkMapMemory(Kernel->Device, Memory, 0, Size, 0, &MemoryMap);
     return MemoryMap;
   } /* MapMemory */
 
   VOID buffer::UnmapMemory( VOID )
   {
-    vkUnmapMemory(Core->Device, Memory);
+    vkUnmapMemory(Kernel->Device, Memory);
   } /* UnmapMemory */
 
-  VOID core::Destroy( buffer &Buffer )
+  VOID kernel::Destroy( buffer &Buffer )
   {
     vkFreeMemory(Device, Buffer.Memory, nullptr);
     vkDestroyBuffer(Device, Buffer.Buffer, nullptr);

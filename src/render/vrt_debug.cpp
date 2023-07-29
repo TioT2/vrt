@@ -1,8 +1,8 @@
 #include "vrt.h"
 
-namespace vrt::render
+namespace vrt::render::core
 {
-  VkBool32 vrt::render::core::DebugMessengerCallback
+  VkBool32 kernel::DebugMessengerCallback
   (
     VkDebugUtilsMessageSeverityFlagBitsEXT      MessageSeverityFlag,
     VkDebugUtilsMessageTypeFlagsEXT             MessageTypeFlags,
@@ -10,8 +10,8 @@ namespace vrt::render
     void*                                       UserData
   )
   {
-    core *Core = reinterpret_cast<core *>(UserData);
-    if (Core->InstanceSetupProcess)
+    kernel *Kernel = reinterpret_cast<kernel *>(UserData);
+    if (Kernel->InstanceSetupProcess)
       return VK_SUCCESS;
     const CHAR *MessageSeverityString;
     std::string MessageTypeString;
@@ -43,10 +43,10 @@ namespace vrt::render
     );
 
     return VK_SUCCESS;
-  } /* core::DebugMessengerCallback */
+  } /* kernel::DebugMessengerCallback */
 
 
-  VkDebugUtilsMessengerCreateInfoEXT core::GetDebugMessengerCreateInfo( VOID )
+  VkDebugUtilsMessengerCreateInfoEXT kernel::GetDebugMessengerCreateInfo( VOID )
   {
     return VkDebugUtilsMessengerCreateInfoEXT
     {
@@ -63,7 +63,7 @@ namespace vrt::render
   } /* GetDebugMessengerCreateInfo */
 
 
-  VOID core::InitializeDebugMessenger( VOID )
+  VOID kernel::InitializeDebugMessenger( VOID )
   {
     auto CreateInfo = GetDebugMessengerCreateInfo();
 
@@ -71,7 +71,7 @@ namespace vrt::render
   } /* InitDebugMessenger */
 
 
-  VOID core::CloseDebugMessenger( VOID )
+  VOID kernel::CloseDebugMessenger( VOID )
   {
     vkDestroyDebugUtilsMessengerEXT(Instance, DebugMessenger, nullptr);
   } /* CloseDebugMessenger */

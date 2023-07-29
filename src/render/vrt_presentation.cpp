@@ -1,9 +1,9 @@
 #include "vrt.h"
 #include "vrt.h"
 
-namespace vrt::render
+namespace vrt::render::core
 {
-  VOID core::InitializeSwapchain( VOID )
+  VOID kernel::InitializeSwapchain( VOID )
   {
     // Get support details
     struct
@@ -104,7 +104,7 @@ namespace vrt::render
 
   
   /* Framebuffers initialization function */
-  VOID core::InitializeFramebuffers( VOID )
+  VOID kernel::InitializeFramebuffers( VOID )
   {
     Framebuffers.resize(SwapchainImageViews.size());
     for (SIZE_T i = 0; i < Framebuffers.size(); i++)
@@ -127,7 +127,7 @@ namespace vrt::render
   } /* InitializeFramebuffers */
 
   /* Presentation renderpass initialization function */
-  VOID core::InitializePresentRenderPass( VOID )
+  VOID kernel::InitializePresentRenderPass( VOID )
   {
     VkAttachmentDescription ColorAttachmentDescription
     {
@@ -191,7 +191,7 @@ namespace vrt::render
 
 
   /* Initialize image for RT rendering to */
-  VOID core::InitializeTargetImage( VOID )
+  VOID kernel::InitializeTargetImage( VOID )
   {
     TargetImage = CreateImage(SwapchainImageExtent.width, SwapchainImageExtent.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     ChangeImageLayout(TargetImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL); // reset image layout
@@ -223,7 +223,7 @@ namespace vrt::render
 
 
   /* Presentation pipeline initialization function */
-  VOID core::InitializePresentPipeline( VOID )
+  VOID kernel::InitializePresentPipeline( VOID )
   {
     VkDescriptorSetLayoutBinding DescriptorSetBinding
     {
@@ -455,4 +455,53 @@ namespace vrt::render
 
     Destroy(Shader);
   } /* InitializePresentPipeline */
+
+  VOID kernel::Resize( VOID )
+  {
+    vkDeviceWaitIdle(Device);
+
+    for (VkFramebuffer Framebuffer : Framebuffers)
+      vkDestroyFramebuffer(Device, Framebuffer, nullptr);
+    for (VkImageView ImageView : SwapchainImageViews)
+      vkDestroyImageView(Device, ImageView, nullptr);
+
+    VkSwapchainKHR OldSwapchain = Swapchain;
+
+    InitializeSwapchain();
+    InitializeFramebuffers();
+
+    Destroy(TargetImage);
+    TargetImage = CreateImage(SwapchainImageExtent.width, SwapchainImageExtent.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    ChangeImageLayout(TargetImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL); // reset image layout
+
+    vkDestroySwapchainKHR(Device, OldSwapchain, nullptr);
+
+    VkDescriptorImageInfo DescriptorImageInfo
+    {
+      .sampler = TargetImageSampler,
+      .imageView = TargetImage.ImageView,
+      .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+    };
+
+    VkWriteDescriptorSet RewriteTargetImage
+    {
+      /* VkStructureType               */ .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      /* const void*                   */ .pNext = nullptr,
+      /* VkDescriptorSet               */ .dstSet = VK_NULL_HANDLE,
+      /* uint32_t                      */ .dstBinding = 0,
+      /* uint32_t                      */ .dstArrayElement = 0,
+      /* uint32_t                      */ .descriptorCount = 1,
+      /* VkDescriptorType              */ .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+      /* const VkDescriptorImageInfo*  */ .pImageInfo = &DescriptorImageInfo,
+      /* const VkDescriptorBufferInfo* */ .pBufferInfo = 0,
+      /* const VkBufferView*           */ .pTexelBufferView = 0,
+    };
+
+    RewriteTargetImage.dstSet = PresentDescriptorSet;
+    vkUpdateDescriptorSets(Device, 1, &RewriteTargetImage, 0, nullptr);
+
+    // Rewrite descriptor sets
+    RewriteTargetImage.dstSet = DescriptorSet;
+    vkUpdateDescriptorSets(Device, 1, &RewriteTargetImage, 0, nullptr);
+  } /* Resize */
 } /* namespace rtt::render */
