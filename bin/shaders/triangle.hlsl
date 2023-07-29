@@ -24,17 +24,31 @@ void rrs_main( void )
 {
   float2 FragCoord = (float2)DispatchRaysIndex() / (float2)DispatchRaysDimensions();
 
-  Target[DispatchRaysIndex().xy] = float4(FragCoord, 0.0, 1.0);
+  FragCoord.y = 1 - FragCoord.y;
+
+  ray_payload Payload;
+  Payload.color = float4(0, 0, 0, 0);
+
+  RayDesc Ray;
+  Ray.Origin = float3(FragCoord, 1);
+  Ray.Direction = float3(0, 0, -1);
+
+  Ray.TMin = 0;
+  Ray.TMax = 100;
+
+  TraceRay(Scene, 0, ~0, 0, 1, 0, Ray, Payload);
+
+  Target[DispatchRaysIndex().xy] = Payload.color;
 } /* rrs_main */
 
 [shader("miss")]
 void rms_main( inout ray_payload Payload )
 {
-
+  Payload.color = float4(0.30, 0.47, 0.80, 0.0);
 } /* rms_main */
 
 [shader("closesthit")]
 void rcs_main( inout ray_payload Payload, in attributes Attributes )
 {
-
+  Payload.color = float4(0.0, 1.0, 0.0, 0.0);
 } /* rcs_main */
