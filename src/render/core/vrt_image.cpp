@@ -65,7 +65,7 @@ namespace vrt::render::core
   } /* CreateImage */
 
 
-  VOID kernel::ChangeImageLayout( image &Image, VkImageLayout OldLayout, VkImageLayout NewLayout )
+  VOID kernel::TransferImageLayout( image &Image, VkImageLayout OldLayout, VkImageLayout NewLayout )
   {
     VkCommandBuffer TransferCommandBuffer = BeginTransfer();
 
@@ -138,7 +138,7 @@ namespace vrt::render::core
     );
 
     EndTransfer(TransferCommandBuffer);
-  } /* ChangeImageLayout */
+  } /* TransferImageLayout */
 
   VkImageView kernel::CreateImageView( VkImage Image, VkFormat ImageFormat )
   {

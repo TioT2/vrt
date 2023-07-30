@@ -154,7 +154,7 @@ namespace vrt
     BOOL IsFullscreen = FALSE;
     utils::timer Timer;
     utils::input Input;
-    render::core::kernel Render;
+    render::engine Render;
 
     VOID SwitchFullscreen( VOID )
     {

@@ -8,6 +8,9 @@
     <Filter Include="Source Files\Render">
       <UniqueIdentifier>{1e63b9b2-f4f0-4c7c-91d5-343e477c60b2}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\Render\Core">
+      <UniqueIdentifier>{d64825af-2328-414f-bb45-a5966ca2d5d0}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\vrt_main.cpp">
@@ -19,31 +22,40 @@
     <ClCompile Include="src\vrt_entry_point.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\render\vrt_debug.cpp">
-      <Filter>Source Files\Render</Filter>
+    <ClCompile Include="src\render\core\vrt_shader.cpp">
+      <Filter>Source Files\Render\Core</Filter>
     </ClCompile>
-    <ClCompile Include="src\render\vrt_device.cpp">
-      <Filter>Source Files\Render</Filter>
+    <ClCompile Include="src\render\core\vrt_buffer.cpp">
+      <Filter>Source Files\Render\Core</Filter>
     </ClCompile>
-    <ClCompile Include="src\render\vrt_presentation.cpp">
-      <Filter>Source Files\Render</Filter>
+    <ClCompile Include="src\render\core\vrt_kernel_debug.cpp">
+      <Filter>Source Files\Render\Core</Filter>
     </ClCompile>
-    <ClCompile Include="src\render\vrt_shader.cpp">
-      <Filter>Source Files\Render</Filter>
+    <ClCompile Include="src\render\core\vrt_kernel_device.cpp">
+      <Filter>Source Files\Render\Core</Filter>
     </ClCompile>
-    <ClCompile Include="src\render\vrt_buffer.cpp">
-      <Filter>Source Files\Render</Filter>
+    <ClCompile Include="src\render\core\vrt_image.cpp">
+      <Filter>Source Files\Render\Core</Filter>
     </ClCompile>
-    <ClCompile Include="src\render\vrt_image.cpp">
-      <Filter>Source Files\Render</Filter>
+    <ClCompile Include="src\render\core\vrt_kernel_presentation.cpp">
+      <Filter>Source Files\Render\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\render\vrt_kernel.cpp">
+      <Filter>Source Files\Render\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\render\core\vrt_kernel_command_buffers.cpp">
+      <Filter>Source Files\Render\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vrt_system.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\render\core\vrt_render_resources.cpp">
+      <Filter>Source Files\Render\Core</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\vrt_def.h">
       <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\render\vrt_render.h">
-      <Filter>Source Files\Render</Filter>
     </ClInclude>
     <ClInclude Include="src\vrt.h">
       <Filter>Source Files</Filter>
@@ -55,6 +67,15 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="src\vrt_mth.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\render\core\vrt_render_core.h">
+      <Filter>Source Files\Render\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\render\vrt_render.h">
+      <Filter>Source Files\Render</Filter>
+    </ClInclude>
+    <ClInclude Include="src\vrt_memory.h">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>

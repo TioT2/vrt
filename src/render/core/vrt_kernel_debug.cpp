@@ -61,20 +61,6 @@ namespace vrt::render::core
       /* void*                                */ .pUserData = this,
     };
   } /* GetDebugMessengerCreateInfo */
-
-
-  VOID kernel::InitializeDebugMessenger( VOID )
-  {
-    auto CreateInfo = GetDebugMessengerCreateInfo();
-
-    vkCreateDebugUtilsMessengerEXT(Instance, &CreateInfo, nullptr, &DebugMessenger);
-  } /* InitDebugMessenger */
-
-
-  VOID kernel::CloseDebugMessenger( VOID )
-  {
-    vkDestroyDebugUtilsMessengerEXT(Instance, DebugMessenger, nullptr);
-  } /* CloseDebugMessenger */
 } /* namespace vrt::render */
 
 /* vrt_debug.cpp */

@@ -499,4 +499,26 @@ namespace vrt::render::core
 
     return Shader;
   } /* LoadRTShader */
+
+  /* rt shader destroying function */
+  VOID kernel::Destroy( rt_shader &Shader )
+  {
+    if (Shader.Raygen       != VK_NULL_HANDLE) vkDestroyShaderModule(Device, Shader.Raygen,       nullptr);
+    if (Shader.AnyHit       != VK_NULL_HANDLE) vkDestroyShaderModule(Device, Shader.AnyHit,       nullptr);
+    if (Shader.ClosestHit   != VK_NULL_HANDLE) vkDestroyShaderModule(Device, Shader.ClosestHit,   nullptr);
+    if (Shader.Miss         != VK_NULL_HANDLE) vkDestroyShaderModule(Device, Shader.Miss,         nullptr);
+    if (Shader.Intersection != VK_NULL_HANDLE) vkDestroyShaderModule(Device, Shader.Intersection, nullptr);
+    if (Shader.Callable     != VK_NULL_HANDLE) vkDestroyShaderModule(Device, Shader.Callable,     nullptr);
+  } /* Destroy */
+
+  /* rt shader destroying function */
+  VOID kernel::Destroy( shader &Shader )
+  {
+    if (Shader.Vertex      != VK_NULL_HANDLE) vkDestroyShaderModule(Device, Shader.Vertex,      nullptr);
+    if (Shader.Fragment    != VK_NULL_HANDLE) vkDestroyShaderModule(Device, Shader.Fragment,    nullptr);
+    if (Shader.Geometry    != VK_NULL_HANDLE) vkDestroyShaderModule(Device, Shader.Geometry,    nullptr);
+    if (Shader.TessEval    != VK_NULL_HANDLE) vkDestroyShaderModule(Device, Shader.TessEval,    nullptr);
+    if (Shader.TessControl != VK_NULL_HANDLE) vkDestroyShaderModule(Device, Shader.TessControl, nullptr);
+    if (Shader.Compute     != VK_NULL_HANDLE) vkDestroyShaderModule(Device, Shader.Compute,     nullptr);
+  } /* Destroy */
 } /* vrt::render */

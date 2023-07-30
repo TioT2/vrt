@@ -191,10 +191,10 @@ namespace vrt::render::core
 
 
   /* Initialize image for RT rendering to */
-  VOID kernel::InitializeTargetImage( VOID )
+  VOID kernel::InitializeTarget( VOID )
   {
     TargetImage = CreateImage(SwapchainImageExtent.width, SwapchainImageExtent.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    ChangeImageLayout(TargetImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL); // reset image layout
+    TransferImageLayout(TargetImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL); // reset image layout
 
     VkSamplerCreateInfo SamplerCreateInfo
     {
@@ -219,7 +219,7 @@ namespace vrt::render::core
     };
 
     utils::AssertResult(vkCreateSampler(Device, &SamplerCreateInfo, nullptr, &TargetImageSampler));
-  } /* InitializeTargetImage */
+  } /* InitializeTarget */
 
 
   /* Presentation pipeline initialization function */
@@ -460,6 +460,7 @@ namespace vrt::render::core
   {
     vkDeviceWaitIdle(Device);
 
+
     for (VkFramebuffer Framebuffer : Framebuffers)
       vkDestroyFramebuffer(Device, Framebuffer, nullptr);
     for (VkImageView ImageView : SwapchainImageViews)
@@ -472,7 +473,7 @@ namespace vrt::render::core
 
     Destroy(TargetImage);
     TargetImage = CreateImage(SwapchainImageExtent.width, SwapchainImageExtent.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    ChangeImageLayout(TargetImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL); // reset image layout
+    TransferImageLayout(TargetImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL); // reset image layout
 
     vkDestroySwapchainKHR(Device, OldSwapchain, nullptr);
 
@@ -501,7 +502,9 @@ namespace vrt::render::core
     vkUpdateDescriptorSets(Device, 1, &RewriteTargetImage, 0, nullptr);
 
     // Rewrite descriptor sets
-    RewriteTargetImage.dstSet = DescriptorSet;
+    RewriteTargetImage.dstSet = Scene->DescriptorSet;
     vkUpdateDescriptorSets(Device, 1, &RewriteTargetImage, 0, nullptr);
+
+    Camera.SetAspect(SwapchainImageExtent.width, SwapchainImageExtent.height);
   } /* Resize */
 } /* namespace rtt::render */

@@ -2,6 +2,20 @@
 
 namespace vrt::render::core
 {
+  UINT32 kernel::FindMemoryType( UINT32 TypeFilter, VkMemoryPropertyFlags PropertyFlags )
+  {
+    VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties {};
+    vkGetPhysicalDeviceMemoryProperties(PhysicalDevice, &physicalDeviceMemoryProperties);
+
+    for (UINT32 i = 0; i < physicalDeviceMemoryProperties.memoryTypeCount; i++)
+    {
+      if (TypeFilter & (1 << i) && utils::CheckFlags(physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags, PropertyFlags))
+        return i;
+    }
+
+    return UINT32_MAX;
+  } /* findMemoryType */
+
   buffer kernel::CreateBuffer( VkDeviceSize Size, VkBufferUsageFlags Usage, VkMemoryPropertyFlags MemoryPropertyFlags )
   {
     buffer Buffer {this};

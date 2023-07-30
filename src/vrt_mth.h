@@ -3,6 +3,18 @@
 
 #include "vrt_def.h"
 
+#define VRT_MTH_DEFINE_OPERATOR_VEC2_VEC2(Oper)            vec2<component> operator Oper  ( const vec2<component> &rhs ) const { return vec3<component>(X Oper rhs.X, Y Oper rhs.Y); }
+#define VRT_MTH_DEFINE_ASSIGNMENT_OPERATOR_VEC2_VEC2(Oper) vec2<component> & operator Oper##=( const vec2<component> &rhs )       { X Oper##= rhs.X; Y Oper##= rhs.Y; return *this; }
+#define VRT_MTH_DEFINE_OPERATOR_VEC2_COMPONENT(Oper)            vec2<component> operator Oper  ( component rhs ) const { return vec3<component>(X Oper rhs, Y Oper rhs); }
+#define VRT_MTH_DEFINE_ASSIGNMENT_OPERATOR_VEC2_COMPONENT(Oper) vec2<component> & operator Oper##=( component rhs ) { X Oper##= rhs; Y Oper##= rhs; return *this; }
+
+#define VRT_MTH_DEFINE_OPERATOR_PACK_VEC2(Oper)           \
+  VRT_MTH_DEFINE_OPERATOR_VEC2_VEC2(Oper)                 \
+  VRT_MTH_DEFINE_ASSIGNMENT_OPERATOR_VEC2_VEC2(Oper)      \
+  VRT_MTH_DEFINE_OPERATOR_VEC2_COMPONENT(Oper)            \
+  VRT_MTH_DEFINE_ASSIGNMENT_OPERATOR_VEC2_COMPONENT(Oper) \
+
+
 #define VRT_MTH_DEFINE_OPERATOR_VEC3_VEC3(Oper)            vec3<component> operator Oper  ( const vec3<component> &rhs ) const { return vec3<component>(X Oper rhs.X, Y Oper rhs.Y, Z Oper rhs.Z); }
 #define VRT_MTH_DEFINE_ASSIGNMENT_OPERATOR_VEC3_VEC3(Oper) vec3<component> & operator Oper##=( const vec3<component> &rhs )       { X Oper##= rhs.X; Y Oper##= rhs.Y; Z Oper##= rhs.Z; return *this; }
 #define VRT_MTH_DEFINE_OPERATOR_VEC3_COMPONENT(Oper)            vec3<component> operator Oper  ( component rhs ) const { return vec3<component>(X Oper rhs, Y Oper rhs, Z Oper rhs); }
@@ -15,16 +27,17 @@
   VRT_MTH_DEFINE_ASSIGNMENT_OPERATOR_VEC3_COMPONENT(Oper) \
 
 
-#define VRT_MTH_DEFINE_OPERATOR_VEC2_VEC2(Oper)            vec2<component> operator Oper  ( const vec2<component> &rhs ) const { return vec3<component>(X Oper rhs.X, Y Oper rhs.Y); }
-#define VRT_MTH_DEFINE_ASSIGNMENT_OPERATOR_VEC2_VEC2(Oper) vec2<component> & operator Oper##=( const vec2<component> &rhs )       { X Oper##= rhs.X; Y Oper##= rhs.Y; return *this; }
-#define VRT_MTH_DEFINE_OPERATOR_VEC2_COMPONENT(Oper)            vec2<component> operator Oper  ( component rhs ) const { return vec3<component>(X Oper rhs, Y Oper rhs); }
-#define VRT_MTH_DEFINE_ASSIGNMENT_OPERATOR_VEC2_COMPONENT(Oper) vec2<component> & operator Oper##=( component rhs ) { X Oper##= rhs; Y Oper##= rhs; return *this; }
+#define VRT_MTH_DEFINE_OPERATOR_VEC4_VEC4(Oper)            vec4<component> operator Oper  ( const vec4<component> &rhs ) const { return vec4<component>(X Oper rhs.X, Y Oper rhs.Y, Z Oper rhs.Z, W Oper rhs.W); }
+#define VRT_MTH_DEFINE_ASSIGNMENT_OPERATOR_VEC4_VEC4(Oper) vec4<component> & operator Oper##=( const vec4<component> &rhs )       { X Oper##= rhs.X; Y Oper##= rhs.Y; Z Oper##= rhs.Z; W Oper##= rhs.W; return *this; }
+#define VRT_MTH_DEFINE_OPERATOR_VEC4_COMPONENT(Oper)            vec4<component> operator Oper  ( component rhs ) const { return vec3<component>(X Oper rhs, Y Oper rhs, Z Oper rhs, W Oper rhs); }
+#define VRT_MTH_DEFINE_ASSIGNMENT_OPERATOR_VEC4_COMPONENT(Oper) vec4<component> & operator Oper##=( component rhs ) { X Oper##= rhs; Y Oper##= rhs; Z Oper##= rhs; W Oper##= rhs; return *this; }
 
-#define VRT_MTH_DEFINE_OPERATOR_PACK_VEC2(Oper)           \
-  VRT_MTH_DEFINE_OPERATOR_VEC2_VEC2(Oper)                 \
-  VRT_MTH_DEFINE_ASSIGNMENT_OPERATOR_VEC2_VEC2(Oper)      \
-  VRT_MTH_DEFINE_OPERATOR_VEC2_COMPONENT(Oper)            \
-  VRT_MTH_DEFINE_ASSIGNMENT_OPERATOR_VEC2_COMPONENT(Oper) \
+#define VRT_MTH_DEFINE_OPERATOR_PACK_VEC4(Oper)           \
+  VRT_MTH_DEFINE_OPERATOR_VEC4_VEC4(Oper)                 \
+  VRT_MTH_DEFINE_ASSIGNMENT_OPERATOR_VEC4_VEC4(Oper)      \
+  VRT_MTH_DEFINE_OPERATOR_VEC4_COMPONENT(Oper)            \
+  VRT_MTH_DEFINE_ASSIGNMENT_OPERATOR_VEC4_COMPONENT(Oper) \
+
 
 namespace vrt
 {
@@ -46,6 +59,50 @@ namespace vrt
       {
         return R * static_cast<component>(180.0 / PI);
       } /* R2D */
+
+    template <arithmetic component>
+      class vec2
+      {
+      public:
+        component X, Y;
+
+        vec2( VOID )
+        {
+
+        } /* vec3 */
+
+        vec2( component X, component Y ) : X(X), Y(Y)
+        {
+
+        } /* vec3 */
+
+        explicit vec2( component v ) : X(v), Y(v)
+        {
+
+        } /* vec3 */
+
+        component operator&( const vec2<component> &Rhs )
+        {
+          return X * Rhs.X + Y * Rhs.Y;
+        } /* operator& */
+
+        component operator%( const vec2<component> &Rhs )
+        {
+          return X * Rhs.Y - Y * Rhs.X;
+        } /* operator% */
+
+        vec2<component> & Normalize( VOID ) const
+        {
+          component length = std::sqrt(X * X + Y * Y);
+
+          return vec3(X / length, Y / length);
+        } /* Normalize */
+
+        VRT_MTH_DEFINE_OPERATOR_PACK_VEC2(+)
+        VRT_MTH_DEFINE_OPERATOR_PACK_VEC2(-)
+        VRT_MTH_DEFINE_OPERATOR_PACK_VEC2(/)
+        VRT_MTH_DEFINE_OPERATOR_PACK_VEC2(*)
+      }; /* vec2 */
 
     template <arithmetic component>
       class vec3
@@ -96,48 +153,48 @@ namespace vrt
       }; /* vec3 */
 
     template <arithmetic component>
-      class vec2
+      class vec4
       {
       public:
-        component X, Y;
+        component X, Y, Z, W; // components
 
-        vec2( VOID )
+        vec4( VOID )
         {
 
         } /* vec3 */
 
-        vec2( component X, component Y ) : X(X), Y(Y)
+        explicit vec4( const vec3<component> &Vec3, component W = component(1) ) : X(Vec3.X), Y(Vec3.Y), Z(Vec3.Z), W(W)
+        {
+
+        } /* vec4 */
+
+        vec4( component X, component Y, component Z, component W ) : X(X), Y(Y), Z(Z), W(W)
         {
 
         } /* vec3 */
 
-        explicit vec2( component v ) : X(v), Y(v)
+        explicit vec4( component v ) : X(v), Y(v), Z(v)
         {
 
         } /* vec3 */
 
-        component operator&( const vec2<component> &Rhs )
+        component operator&( const vec4<component> &Rhs ) const
         {
-          return X * Rhs.X + Y * Rhs.Y;
+          return X * Rhs.X + Y * Rhs.Y + Z * Rhs.Z + W * Rhs.W;
         } /* operator& */
 
-        component operator%( const vec2<component> &Rhs )
+        vec4<component> Normalize( VOID ) const
         {
-          return X * Rhs.Y - Y * Rhs.X;
-        } /* operator% */
+          component length = std::sqrt(X * X + Y * Y + Z * Z + W * W);
 
-        vec2<component> & Normalize( VOID ) const
-        {
-          component length = std::sqrt(X * X + Y * Y);
-
-          return vec3(X / length, Y / length);
+          return vec4<component>(X / length, Y / length, Z / length, W / length);
         } /* Normalize */
 
-        VRT_MTH_DEFINE_OPERATOR_PACK_VEC2(+)
-        VRT_MTH_DEFINE_OPERATOR_PACK_VEC2(-)
-        VRT_MTH_DEFINE_OPERATOR_PACK_VEC2(/)
-        VRT_MTH_DEFINE_OPERATOR_PACK_VEC2(*)
-      }; /* vec2 */
+        VRT_MTH_DEFINE_OPERATOR_PACK_VEC4(+)
+        VRT_MTH_DEFINE_OPERATOR_PACK_VEC4(-)
+        VRT_MTH_DEFINE_OPERATOR_PACK_VEC4(/)
+        VRT_MTH_DEFINE_OPERATOR_PACK_VEC4(*)
+      }; /* vec4 */
 
     template <arithmetic component>
       class mat3
@@ -185,11 +242,11 @@ namespace vrt
         operator VkTransformMatrixKHR( VOID ) const
         {
           return VkTransformMatrixKHR
-          {{{
+          {{
             {Data[0][0], Data[1][0], Data[2][0], Data[3][0]},
             {Data[0][1], Data[1][1], Data[2][1], Data[3][1]},
             {Data[0][2], Data[1][2], Data[2][2], Data[3][2]},
-          }}};
+          }};
         } /* operator VkTransformMatrixKHR */
 
         mat4 Transpose( VOID ) const
@@ -589,137 +646,52 @@ namespace vrt
       }; /* mat4 */
 
     template <arithmetic component>
-      class camera
+      struct camera
       {
-      public:
-        vec3<component>
-          Location  = vec3<component>(0, 0, 0), // Camera position
-          Up        = vec3<component>(0, 1, 0), // Camera Up vector
-          Right     = vec3<component>(1, 0, 0), // Camera Right vector
-          Direction = vec3<component>(0, 0, 1), // Camera direction vector
-          At        = vec3<component>(0, 0, 5); // Camera at vector
-        component
-          FrameW   = 320.0f,                  // Frame width
-          FrameH   = 240.0f,                  // Frame height
-          ProjectionSize = 0.2f,              // Projection size
-          NearPlane     = 0.1f,               // Near plane
-          FarPlane      = 16384.0f;           // Far plane
-        mat4<component>
-          Projection,                        // Projection matrix
-          View,                              // View matrix
-          ViewProjection;                    // View * Projection matrix
+        vec3<component> Location  = vec3<component>(0, 0, 1);
+        vec3<component> Direction = vec3<component>(0, 0, -1);
+        vec3<component> Right     = vec3<component>(1, 0, 0);
+        vec3<component> Up        = vec3<component>(0, 1, 0);
+        component Near = 1.0f, Width = 1.0f, Height = 1.0f;
 
-        //default camera constructor
-        camera( VOID )
+        /* Camera setting function */
+        VOID Set( const vec3<component> &NewLocation, const vec3<component> &NewDirection, const vec3<component> &NewUp = vec3<component>(0, 1, 0) )
         {
+          Location = NewLocation;
+          // orthonormalization
+          Direction = NewDirection.Normalize();
+          Right = (Direction % NewUp).Normalize();
+          Up = (Right % Direction).Normalize();
+        } /* Set */
 
-        } /* End of 'camera' function */
-
-        /* Camera constructor function.
-         * ARGUMENTS:
-         *   - loc vector:
-         *       const vec3 &L;
-         *   - up vector:
-         *       const vec3 &U;
-         *   - dir vector:
-         *       const vec3 &D;
-         */
-        camera( const vec3<component> &L, const vec3<component> &D, const vec3<component> &U = vec3<component>(0, 1, 0) ) : Location(L), Up(U), Direction(D), Right((U % D).Normalize())
+        VOID SetAspect( component ScreenWidth, component ScreenHeight )
         {
-        } /* End of 'camera' function. */
+          Width = Near;
+          Height = Near;
 
-        /* Reshape camera function.
-         * ARGUMENTS:
-         *   - new frame size:
-         *       FLOAT NewFW, NewFH;
-         * RETURNS: None.
-         */
-        VOID Reshape( component NewFW, component NewFH )
-        {
-          FrameW = NewFW;
-          FrameH = NewFH;
-          ResetProjection();
-        } /* End of 'Reshape' function */
-
-        /* Projection setting function.
-         * ARGUMENTS: None.
-         * RETURNS: None.
-         */
-        VOID ResetProjection( VOID )
-        {
-          component
-            rx = ProjectionSize,
-            ry = ProjectionSize;
-
-          if (FrameW > FrameH)
-            rx *= (component)FrameW / FrameH;
+          if (ScreenWidth > ScreenHeight)
+            Width *= ScreenWidth / ScreenHeight;
           else
-            ry *= (component)FrameH / FrameW;
-
-          Projection = mat4<component>::Frustum(-rx / 2, rx / 2, -ry / 2, ry / 2, NearPlane, FarPlane);
-          ViewProjection = View * Projection;
-        } /* End of 'ProjSet' function */
-
-        /* Ortho matrix projection function.
-         * ARGUMENTS: None.
-         * RETURNS: None.
-         */
-        VOID ResetProjectionOrtho( VOID )
-        {
-          component
-            rx = ProjectionSize,
-            ry = ProjectionSize;
-
-          if (FrameW > FrameH)
-            rx *= (component)FrameW / FrameH;
-          else
-            ry *= (component)FrameH / FrameW;
-
-          Projection = mat4<component>::Ortho(-rx / 2, rx / 2, -ry / 2, ry / 2, NearPlane, FarPlane);
-          ViewProjection = View * Projection;
-        } /* End of 'ProjSetOrtho' function */
-
-        /* Camera setting function.
-         * ARGUMENTS:
-         *   - camera location:
-         *       const vec3 &nLoc;
-         *   - point of view:
-         *       const vec3 &nAt;
-         *   - up vector:
-         *       const vec3 &nUp;
-         * RETURNS: None.
-         */
-        VOID Set( const vec3<component> &nLoc, const vec3<component> &nAt, const vec3<component> &nUp = vec3<component>(0, 1, 0) )
-        {
-          View = mat4<component>::View(nLoc, nAt, nUp);
-          Right = vec3<component>( View.Data[0][0],
-                                   View.Data[1][0],
-                                   View.Data[2][0]);
-          Up =    vec3<component>( View.Data[0][1],
-                                   View.Data[1][1],
-                                   View.Data[2][1]);
-          Direction =   vec3<component>(-View.Data[0][2],
-                                  -View.Data[1][2],
-                                  -View.Data[2][2]);
-          Location = nLoc;
-          At = nAt;
-          ViewProjection = View * Projection;
-        } /* End of 'Set' function */
-      }; /* camera */
+            Height *= ScreenHeight / ScreenWidth;
+        } /* SetAspect */
+      }; /* camera_buffer */
   } /* mth */
 
   using ivec2 = mth::vec2<INT>;
   using ivec3 = mth::vec3<INT>;
+  using ivec4 = mth::vec4<INT>;
   using imat4 = mth::mat4<INT>;
   using imat3 = mth::mat3<INT>;
 
   using vec2 = mth::vec2<FLOAT>;
   using vec3 = mth::vec3<FLOAT>;
+  using vec4 = mth::vec4<FLOAT>;
   using mat4 = mth::mat4<FLOAT>;
   using mat3 = mth::mat3<FLOAT>;
 
   using dvec2 = mth::vec2<DOUBLE>;
   using dvec3 = mth::vec3<DOUBLE>;
+  using dvec4 = mth::vec4<DOUBLE>;
   using dmat4 = mth::mat4<DOUBLE>;
   using dmat3 = mth::mat3<DOUBLE>;
 

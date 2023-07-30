@@ -19,23 +19,29 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\render\vrt_buffer.cpp" />
-    <ClCompile Include="src\render\vrt_debug.cpp" />
-    <ClCompile Include="src\render\vrt_device.cpp" />
-    <ClCompile Include="src\render\vrt_image.cpp" />
-    <ClCompile Include="src\render\vrt_presentation.cpp" />
-    <ClCompile Include="src\render\vrt_shader.cpp" />
+    <ClCompile Include="src\render\core\vrt_render_resources.cpp" />
+    <ClCompile Include="src\render\core\vrt_buffer.cpp" />
+    <ClCompile Include="src\render\core\vrt_kernel_command_buffers.cpp" />
+    <ClCompile Include="src\render\core\vrt_kernel_debug.cpp" />
+    <ClCompile Include="src\render\core\vrt_kernel_device.cpp" />
+    <ClCompile Include="src\render\core\vrt_image.cpp" />
+    <ClCompile Include="src\render\core\vrt_kernel_presentation.cpp" />
+    <ClCompile Include="src\render\core\vrt_shader.cpp" />
+    <ClCompile Include="src\render\vrt_kernel.cpp" />
     <ClCompile Include="src\vrt.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="src\vrt_entry_point.cpp" />
     <ClCompile Include="src\vrt_main.cpp" />
+    <ClCompile Include="src\vrt_system.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\render\core\vrt_render_core.h" />
     <ClInclude Include="src\render\vrt_render.h" />
     <ClInclude Include="src\vrt.h" />
     <ClInclude Include="src\vrt_def.h" />
+    <ClInclude Include="src\vrt_memory.h" />
     <ClInclude Include="src\vrt_mth.h" />
     <ClInclude Include="src\vrt_system.h" />
     <ClInclude Include="src\vrt_utils.h" />

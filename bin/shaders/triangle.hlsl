@@ -5,8 +5,17 @@ struct hit_info
   float HitSky;
 };
 
+struct camera_data
+{
+  float4 Location;
+  float4 DirectionNear;
+  float4 RightWidth;
+  float4 UpHeight;
+};
+
 RWTexture2D<float4> Target : register(u0, space0);
 RaytracingAccelerationStructure Scene : register(t1, space0);
+ConstantBuffer<camera_data> Camera : register(b2, space0);
 
 struct buffer_data
 {
@@ -19,6 +28,11 @@ struct ray_payload
     float4 color;
 };
 
+float3 RayDirectionFromScreenCoord( float2 ScreenCoord )
+{
+  return normalize(Camera.DirectionNear.xyz + Camera.RightWidth.xyz * ScreenCoord.x + Camera.UpHeight.xyz * ScreenCoord.y);
+} /* RayDirectionFromTexCoord */
+
 [shader("raygeneration")]
 void rrs_main( void )
 {
@@ -27,10 +41,11 @@ void rrs_main( void )
 
   // vulkan...
   FragCoord.y = 1 - FragCoord.y;
+  FragCoord = FragCoord * 2.0 - 1.0;
 
   RayDesc Ray;
-  Ray.Origin = float3(FragCoord, 1);
-  Ray.Direction = float3(0, 0, -1);
+  Ray.Origin = Camera.Location.xyz;
+  Ray.Direction = RayDirectionFromScreenCoord(FragCoord);//float3(0, 0, -1);
 
   Ray.TMin = 0;
   Ray.TMax = 100;
@@ -44,8 +59,9 @@ void rrs_main( void )
       ray_payload Payload;
 
       Payload.color = float4(0, 0, 0, 0);
+      SubRay.Origin = Camera.Location.xyz;
+      SubRay.Direction = RayDirectionFromScreenCoord(FragCoord + PixelSize / 3.0 * float2(x, y));
 
-      Ray.Origin += float3(PixelSize / 3.0 * float2(x, y), 0.0);
       TraceRay(Scene, 0, ~0, 0, 1, 0, SubRay, Payload);
 
       Color += Payload.color;
@@ -63,5 +79,5 @@ void rms_main( inout ray_payload Payload )
 [shader("closesthit")]
 void rcs_main( inout ray_payload Payload, in attributes Attributes )
 {
-  Payload.color = float4(1 - Attributes.barycentrics.x - Attributes.barycentrics.y, Attributes.barycentrics.x, Attributes.barycentrics.y, 0.0);
+  Payload.color = float4(1.00, 1.00, 1.00, /*1 - Attributes.barycentrics.x - Attributes.barycentrics.y, Attributes.barycentrics.x, Attributes.barycentrics.y,*/ 0.0);
 } /* rcs_main */
