@@ -37,7 +37,6 @@ namespace vrt
       VOID AddBlock( VOID )
       {
         block *Block = new block(FirstBlock);
-        FirstBlock = Block;
 
         for (UINT32 i = 0; i < BLOCK_SIZE - 1; i++)
         {
@@ -50,6 +49,8 @@ namespace vrt
           Block->Data[BLOCK_SIZE - 1].Next = FirstFree;
           FirstFree->Prev = Block->Data + BLOCK_SIZE - 1;
         }
+
+        FirstBlock = Block;
         FirstFree = Block->Data;
       } /* AddBlock */
 
@@ -181,24 +182,24 @@ namespace vrt
           FirstUsed = stg->Next;
           if (FirstUsed != nullptr)
             FirstUsed->Prev = nullptr;
+          stg->Next = nullptr;
         }
         else
         {
           stg->Prev->Next = stg->Next;
+          stg->Prev = nullptr;
 
           if (stg->Next != nullptr)
             stg->Next->Prev = stg->Prev;
-
         }
 
         if (FirstToDelete != nullptr)
         {
           FirstToDelete->Prev = stg;
           stg->Next = FirstToDelete;
-          FirstToDelete = stg;
         }
-        else
-          FirstToDelete = stg;
+
+        FirstToDelete = stg;
       } /* Free */
 
       VOID FlushFree( VOID )
@@ -323,6 +324,11 @@ namespace vrt
       {
         return Ptr;
       } /* operator resource_type * */
+
+      inline resource_type * operator->( VOID )
+      {
+        return Ptr;
+      } /* operator-> */
 
       ~ptr( VOID )
       {

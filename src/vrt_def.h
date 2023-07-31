@@ -65,6 +65,7 @@ namespace vrt
   using UINT64 = unsigned __int64;
 
   using CHAR = char;
+  using WCHAR = wchar_t;
 
   using BOOL = bool;
   inline constexpr BOOL TRUE = true;

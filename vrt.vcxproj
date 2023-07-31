@@ -27,6 +27,7 @@
     <ClCompile Include="src\render\core\vrt_image.cpp" />
     <ClCompile Include="src\render\core\vrt_kernel_presentation.cpp" />
     <ClCompile Include="src\render\core\vrt_shader.cpp" />
+    <ClCompile Include="src\render\core\vrt_shader_compiler.cpp" />
     <ClCompile Include="src\render\vrt_kernel.cpp" />
     <ClCompile Include="src\vrt.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>

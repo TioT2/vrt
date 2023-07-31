@@ -52,6 +52,9 @@
     <ClCompile Include="src\render\core\vrt_render_resources.cpp">
       <Filter>Source Files\Render\Core</Filter>
     </ClCompile>
+    <ClCompile Include="src\render\core\vrt_shader_compiler.cpp">
+      <Filter>Source Files\Render\Core</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\vrt_def.h">

@@ -92,6 +92,20 @@ namespace vrt
         static const CHAR * GetModuleTypeName( module_type Type );
       }; /* rt_shader */
 
+      struct module_compilation_info
+      {
+        std::wstring_view EntryPointName;
+        std::wstring_view ShaderTypePrefix;
+        std::wstring_view HLSLProfilePrefix;
+        VkShaderModule Module;
+      };
+
+      class shader_compiler
+      {
+      public:
+        VOID Compile( std::string_view Path, std::span<module_compilation_info> CompilationDescription, VkDevice Device );
+      }; /* shader_compiler */
+
       struct shader
       {
         enum struct module_type
@@ -104,6 +118,8 @@ namespace vrt
           COMPUTE      = 5,
         };
         constexpr static SIZE_T ModuleCount = 6;
+
+        kernel *Kernel = nullptr;
 
         VkShaderModule Vertex      = VK_NULL_HANDLE;
         VkShaderModule Fragment    = VK_NULL_HANDLE;
@@ -128,15 +144,14 @@ namespace vrt
         kernel *Kernel = nullptr;
 
         VkShaderModule ClosestHitShader = VK_NULL_HANDLE; // closesthit shader
+
+        ~material( VOID );
       }; /* material */
 
       struct primitive : resource<UINT32>
       {
         kernel *Kernel = nullptr;
         material *Material = nullptr;
-
-        buffer TLASStorageBuffer;                         // Acceleration structure storage buffer
-        VkAccelerationStructureKHR TLAS = VK_NULL_HANDLE; // Acceleration structure
 
         SIZE_T VertexPositionComponentOffset = 0;
         SIZE_T VertexSize = 0;
@@ -161,18 +176,7 @@ namespace vrt
         buffer BLASStorageBuffer {};
         VkAccelerationStructureKHR BLAS = VK_NULL_HANDLE;
 
-        /* Add vertex primitive to model */
-        template <typename vertex_type>
-          VOID AddPrimitive( std::span<const vertex_type> Vertices, SIZE_T PositionOffset, std::span<const UINT32> Indices )
-          {
-
-          } /* AddPrimitive */
-
-        ~model( VOID )
-        {
-          for (primitive *Prim : Primitives)
-            Prim->Release();
-        } /* model */
+        ~model( VOID );
       }; /* model */
 
       struct scene : resource<std::string>
@@ -188,6 +192,8 @@ namespace vrt
         VkDescriptorSetLayout DescriptorSetLayout = VK_NULL_HANDLE;
         VkDescriptorPool DescriptorPool = VK_NULL_HANDLE;
         VkDescriptorSet DescriptorSet = VK_NULL_HANDLE;
+
+        SIZE_T HitShaderGroupCount = 0;
 
         buffer TLASStorageBuffer {};
         buffer InstanceBuffer {};
@@ -372,19 +378,35 @@ namespace vrt
         VkFence InFlightFence = VK_NULL_HANDLE;
         VkSemaphore ImageAvailableSemaphore = VK_NULL_HANDLE, RenderFinishedSemaphore = VK_NULL_HANDLE;
 
-        scene *Scene;
-        primitive *Primitive;
+        scene *Scene = nullptr;
 
         // buffer SBTStorageBuffer;
         SIZE_T SBTAlignedGroupSize = 0;
 
+        material * CreateMaterial( const std::string &MaterialName, std::string_view ShaderName )
+        {
+          material *Mtl = manager<material, std::string>::CreateResource(MaterialName);
+
+          module_compilation_info Info {L"rcs_main", L"rcs", L"lib"};
+          shader_compiler Compiler;
+          Compiler.Compile(ShaderName, std::span<module_compilation_info>(&Info, 1), Device);
+
+          Mtl->Kernel = this;
+          Mtl->ClosestHitShader = Info.Module;
+
+          return Mtl;
+        } /* CreateMaterial */
+
         template <typename vertex_type>
-          primitive * CreatePrimitive( std::span<const vertex_type> Vertices, SIZE_T PositionComponentOffset, std::span<const UINT32> Indices, const mat4 &TransformMatrix = mat4() )
+          primitive * CreatePrimitive( material *Material, std::span<const vertex_type> Vertices, SIZE_T PositionComponentOffset, std::span<const UINT32> Indices, const mat4 &TransformMatrix = mat4() )
           {
             primitive *Primitive = manager<primitive>::CreateResource();
 
             Primitive->Kernel = this;
-            
+            Primitive->Material = Material;
+
+            Material->Grab();
+
             Primitive->TrasnformMatrix = TransformMatrix;
             /* initialize buffers */
             Primitive->VertexBuffer = CreateBuffer(Vertices.size_bytes(),
@@ -402,92 +424,8 @@ namespace vrt
               Primitive->IndexCount = Indices.size();
             }
 
-            VkAccelerationStructureGeometryTrianglesDataKHR TrianglesData
-            {
-              /* VkStructureType               */ .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,
-              /* const void*                   */ .pNext = nullptr,
-              /* VkFormat                      */ .vertexFormat = VK_FORMAT_R32G32B32_SFLOAT,
-              /* VkDeviceOrHostAddressConstKHR */ .vertexData = { .deviceAddress = Primitive->VertexBuffer.GetDeviceAddress() + PositionComponentOffset },
-              /* VkDeviceSize                  */ .vertexStride = sizeof(vertex_type),
-              /* uint32_t                      */ .maxVertex = static_cast<UINT32>(Primitive->VertexCount),
-              /* VkIndexType                   */ // .indexType = VK_INDEX_TYPE_UINT32,
-              /* VkDeviceOrHostAddressConstKHR */ // .indexData = Primitive->IndexCount != 0 ? { .deviceAddress = Primitive->IndexBuffer.GetDeviceAddress() } : {},
-              /* VkDeviceOrHostAddressConstKHR */ .transformData {},
-            };
-
-            if (Primitive->IndexCount != 0)
-            {
-              TrianglesData.indexType = VK_INDEX_TYPE_UINT32;
-              TrianglesData.indexData = { .deviceAddress = Primitive->IndexBuffer.GetDeviceAddress() };
-            }
-            else
-            {
-              TrianglesData.indexType = VK_INDEX_TYPE_NONE_KHR;
-              TrianglesData.indexData = {};
-            }
-
-            VkAccelerationStructureGeometryKHR Geometry
-            {
-              /* VkStructureType                        */ .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
-              /* const void*                            */ .pNext = nullptr,
-              /* VkGeometryTypeKHR                      */ .geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
-              /* VkAccelerationStructureGeometryDataKHR */ .geometry = TrianglesData,
-              /* VkGeometryFlagsKHR                     */ .flags = VK_GEOMETRY_OPAQUE_BIT_KHR,
-            };
-
-            VkAccelerationStructureBuildRangeInfoKHR RangeInfo
-            {
-              .primitiveCount = static_cast<UINT32>(Primitive->VertexCount / 3),
-              .primitiveOffset = 0,
-              .firstVertex = 0,
-              .transformOffset = 0,
-            };
-
-            VkAccelerationStructureBuildGeometryInfoKHR GeometryBuildInfo
-            {
-              /* VkStructureType                                  */ .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-              /* const void*                                      */ .pNext = nullptr,
-              /* VkAccelerationStructureTypeKHR                   */ .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-              /* VkBuildAccelerationStructureFlagsKHR             */ .flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR,
-              /* VkBuildAccelerationStructureModeKHR              */ .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
-              /* VkAccelerationStructureKHR                       */ .srcAccelerationStructure = VK_NULL_HANDLE,
-              /* VkAccelerationStructureKHR                       */ .dstAccelerationStructure = VK_NULL_HANDLE,
-              /* uint32_t                                         */ .geometryCount = 1,
-              /* const VkAccelerationStructureGeometryKHR*        */ .pGeometries = &Geometry,
-              /* const VkAccelerationStructureGeometryKHR* const* */ .ppGeometries = nullptr,
-              /* VkDeviceOrHostAddressKHR                         */ .scratchData = 0,
-            };
-
-            VkAccelerationStructureBuildSizesInfoKHR BuildSizesInfo {VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
-
-            vkGetAccelerationStructureBuildSizesKHR(Device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &GeometryBuildInfo, &RangeInfo.primitiveCount, &BuildSizesInfo);
-            Primitive->TLASStorageBuffer = CreateBuffer(BuildSizesInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-            VkAccelerationStructureCreateInfoKHR AccelerationStructureCreateInfo
-            {
-              /* VkStructureType                       */ .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
-              /* const void*                           */ .pNext = nullptr,
-              /* VkAccelerationStructureCreateFlagsKHR */ .createFlags = 0,
-              /* VkBuffer                              */ .buffer = Primitive->TLASStorageBuffer.Buffer,
-              /* VkDeviceSize                          */ .offset = 0,
-              /* VkDeviceSize                          */ .size = BuildSizesInfo.accelerationStructureSize,
-              /* VkAccelerationStructureTypeKHR        */ .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-              /* VkDeviceAddress                       */ .deviceAddress = 0,
-            };
-
-            vkCreateAccelerationStructureKHR(Device, &AccelerationStructureCreateInfo, nullptr, &Primitive->TLAS);
-
-            GeometryBuildInfo.dstAccelerationStructure = Primitive->TLAS;
-            buffer ScratchBuffer = CreateBuffer(BuildSizesInfo.buildScratchSize, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-            GeometryBuildInfo.scratchData.deviceAddress = ScratchBuffer.GetDeviceAddress();
-
-            // building acceleration buffer
-            VkCommandBuffer CommandBuffer = BeginSingleTimeCommands();
-            VkAccelerationStructureBuildRangeInfoKHR *PtrRangeInfo = &RangeInfo;
-            vkCmdBuildAccelerationStructuresKHR(CommandBuffer, 1, &GeometryBuildInfo, &PtrRangeInfo);
-            EndSingleTimeCommands(CommandBuffer);
-
-            Destroy(ScratchBuffer);
+            Primitive->VertexSize = sizeof(vertex_type);
+            Primitive->VertexPositionComponentOffset = PositionComponentOffset;
 
             return Primitive;
           } /* CreatePrimitive */
@@ -498,6 +436,10 @@ namespace vrt
         model * CreateModel( std::span<primitive *> Primitives, mat4 TransformMatrix = mat4() )
         {
           model *Model = manager<model>::CreateResource();
+
+          for (primitive *Prim : Primitives)
+            Prim->Grab();
+          Model->Primitives = {Primitives.begin(), Primitives.end()};
 
           Model->Kernel = this;
             
@@ -534,7 +476,7 @@ namespace vrt
             if (Primitives[i]->IndexCount != 0)
             {
               TrianglesData.indexType = VK_INDEX_TYPE_UINT32;
-              TrianglesData.indexData = { .deviceAddress = Primitive->IndexBuffer.GetDeviceAddress() };
+              TrianglesData.indexData = { .deviceAddress = Primitives[i]->IndexBuffer.GetDeviceAddress() };
             }
             else
             {
@@ -562,7 +504,7 @@ namespace vrt
 
           GeometryPrimitiveCounts.resize(Primitives.size());
           for (UINT32 i = 0; i < GeometryPrimitiveCounts.size(); i++)
-            GeometryPrimitiveCounts[i] = Primitives[i]->VertexCount / 3;
+            GeometryPrimitiveCounts[i] = std::max(Primitives[i]->VertexCount, Primitives[i]->IndexCount) / 3;
 
           VkAccelerationStructureBuildSizesInfoKHR BuildSizesInfo {VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
 
@@ -610,43 +552,50 @@ namespace vrt
         } /* CreateModel */
 
         /* Scene building function */
-        scene * CreateScene( const std::string &SceneName, std::span<const primitive *> Primitives )
+        scene * CreateScene( const std::string &SceneName, std::span<model *> Models )
         {
           scene *Scene = manager<scene, std::string>::CreateResource(SceneName);
 
+          for (model *Model : Models)
+            Model->Grab();
+          Scene->Models = {Models.begin(), Models.end()};
+
           Scene->Kernel = this;
 
-          Scene->InstanceCount = Primitives.size();
+          Scene->InstanceCount = Models.size();
 
           // initialize 'vertex buffer' of TLAS
           Scene->InstanceBuffer = CreateBuffer
           (
-            sizeof(VkAccelerationStructureInstanceKHR) * Primitives.size(),
+            sizeof(VkAccelerationStructureInstanceKHR) * Models.size(),
             VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
           );
 
           VkAccelerationStructureInstanceKHR *InstanceData = reinterpret_cast<VkAccelerationStructureInstanceKHR *>(Scene->InstanceBuffer.MapMemory());
+
+          UINT32 Offset = 0;
           for (SIZE_T i = 0; i < Scene->InstanceCount; i++)
           {
             VkAccelerationStructureDeviceAddressInfoKHR DeviceAddressInfo
             {
               .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
               .pNext = nullptr,
-              .accelerationStructure = Primitives[i]->TLAS,
+              .accelerationStructure = Models[i]->BLAS,
             };
 
             VkDeviceAddress BLASAddres = vkGetAccelerationStructureDeviceAddressKHR(Device, &DeviceAddressInfo);
 
             InstanceData[i] = VkAccelerationStructureInstanceKHR
             {
-              .transform = Primitive->TrasnformMatrix,
+              .transform = Models[i]->TransformMatrix,
               .instanceCustomIndex = 0,
               .mask = 0xFF,
-              .instanceShaderBindingTableRecordOffset = 0,
+              .instanceShaderBindingTableRecordOffset = Offset,
               .flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR,
               .accelerationStructureReference = BLASAddres,
             };
+            Offset += Models[i]->Primitives.size();
           }
           Scene->InstanceBuffer.UnmapMemory();
 
@@ -854,64 +803,81 @@ namespace vrt
 
           vkUpdateDescriptorSets(Device, static_cast<UINT32>(std::size(DescriptorSetWrites)), DescriptorSetWrites, 0, nullptr);
 
-          rt_shader Shader = LoadRTShader("bin/shaders/triangle");
+          module_compilation_info Shader {L"", L"", L"lib"};
+          shader_compiler Compiler;
+          Compiler.Compile("bin/shaders/start", std::span<module_compilation_info>(&Shader, 1), Device);
 
-          std::vector<VkPipelineShaderStageCreateInfo> ShaderStageCreateInfos
+          Scene->HitShaderGroupCount = 0;
+          for (const model *Model : Models)
+            Scene->HitShaderGroupCount += Model->Primitives.size();
+
+          std::vector<VkPipelineShaderStageCreateInfo> ShaderStageCreateInfos {Scene->HitShaderGroupCount + 2};
+
+          ShaderStageCreateInfos[0] = VkPipelineShaderStageCreateInfo
           {
-            {
-              /* VkStructureType                  */ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-              /* VkShaderStageFlagBits            */ .stage = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
-              /* VkShaderModule                   */ .module = Shader.Raygen,
-              /* const char*                      */ .pName = rt_shader::GetModuleTypeEntryPointName(rt_shader::module_type::RAYGEN),
-            },
-            {
-              /* VkStructureType                  */ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-              /* VkShaderStageFlagBits            */ .stage = VK_SHADER_STAGE_MISS_BIT_KHR,
-              /* VkShaderModule                   */ .module = Shader.Miss,
-              /* const char*                      */ .pName = rt_shader::GetModuleTypeEntryPointName(rt_shader::module_type::MISS)
-            },
-            {
-              /* VkStructureType                  */ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-              /* VkShaderStageFlagBits            */ .stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
-              /* VkShaderModule                   */ .module = Shader.ClosestHit,
-              /* const char*                      */ .pName = rt_shader::GetModuleTypeEntryPointName(rt_shader::module_type::CLOSEST_HIT),
-            },
+            /* VkStructureType                  */ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            /* VkShaderStageFlagBits            */ .stage = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+            /* VkShaderModule                   */ .module = Shader.Module,
+            /* const char*                      */ .pName = "rrs_main",
           };
 
-          /* Shader gropus */
-          std::vector<VkRayTracingShaderGroupCreateInfoKHR> ShaderGroupCreateInfos
+          ShaderStageCreateInfos[1] = VkPipelineShaderStageCreateInfo
           {
-            {
-              .sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
-              .pNext = nullptr,
-              .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
-              .generalShader = 0,
-              .closestHitShader = VK_SHADER_UNUSED_KHR,
-              .anyHitShader = VK_SHADER_UNUSED_KHR,
-              .intersectionShader = VK_SHADER_UNUSED_KHR,
-              .pShaderGroupCaptureReplayHandle = VK_NULL_HANDLE,
-            },
-            {
-              .sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
-              .pNext = nullptr,
-              .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
-              .generalShader = 1,
-              .closestHitShader = VK_SHADER_UNUSED_KHR,
-              .anyHitShader = VK_SHADER_UNUSED_KHR,
-              .intersectionShader = VK_SHADER_UNUSED_KHR,
-              .pShaderGroupCaptureReplayHandle = VK_NULL_HANDLE,
-            },
+            /* VkStructureType                  */ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            /* VkShaderStageFlagBits            */ .stage = VK_SHADER_STAGE_MISS_BIT_KHR,
+            /* VkShaderModule                   */ .module = Shader.Module,
+            /* const char*                      */ .pName = "rms_main"
+          };
+
+          SIZE_T i = 2;
+          for (SIZE_T m = 0; m < Models.size(); m++)
+            for (SIZE_T p = 0; p < Models[m]->Primitives.size(); p++)
+              ShaderStageCreateInfos[i++] = VkPipelineShaderStageCreateInfo
+              {
+                /* VkStructureType                  */ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                /* VkShaderStageFlagBits            */ .stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+                /* VkShaderModule                   */ .module = Models[m]->Primitives[p]->Material->ClosestHitShader,
+                /* const char*                      */ .pName = rt_shader::GetModuleTypeEntryPointName(rt_shader::module_type::CLOSEST_HIT),
+              };
+
+          /* Shader gropus */
+          std::vector<VkRayTracingShaderGroupCreateInfoKHR> ShaderGroupCreateInfos {Scene->HitShaderGroupCount + 2};
+          ShaderGroupCreateInfos[0] = VkRayTracingShaderGroupCreateInfoKHR
+          {
+            .sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+            .pNext = nullptr,
+            .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+            .generalShader = 0,
+            .closestHitShader = VK_SHADER_UNUSED_KHR,
+            .anyHitShader = VK_SHADER_UNUSED_KHR,
+            .intersectionShader = VK_SHADER_UNUSED_KHR,
+            .pShaderGroupCaptureReplayHandle = VK_NULL_HANDLE,
+          };
+
+          ShaderGroupCreateInfos[1] = VkRayTracingShaderGroupCreateInfoKHR
+          {
+            .sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+            .pNext = nullptr,
+            .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+            .generalShader = 1,
+            .closestHitShader = VK_SHADER_UNUSED_KHR,
+            .anyHitShader = VK_SHADER_UNUSED_KHR,
+            .intersectionShader = VK_SHADER_UNUSED_KHR,
+            .pShaderGroupCaptureReplayHandle = VK_NULL_HANDLE,
+          };
+
+          for (UINT32 i = 0; i < Scene->HitShaderGroupCount; i++)
+            ShaderGroupCreateInfos[i + 2] = VkRayTracingShaderGroupCreateInfoKHR
             {
               .sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
               .pNext = nullptr,
               .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
               .generalShader = VK_SHADER_UNUSED_KHR,
-              .closestHitShader = 2,
+              .closestHitShader = i + 2,
               .anyHitShader = VK_SHADER_UNUSED_KHR,
               .intersectionShader = VK_SHADER_UNUSED_KHR,
               .pShaderGroupCaptureReplayHandle = VK_NULL_HANDLE,
-            },
-          };
+            };
 
           VkPipelineLayoutCreateInfo PipelineLayoutCreateInfo
           {
@@ -946,7 +912,7 @@ namespace vrt
 
           utils::AssertResult(vkCreateRayTracingPipelinesKHR(Device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &PipelineCreateInfo, nullptr, &Scene->Pipeline), "error creating RT pipelines");
 
-          Destroy(Shader);
+          vkDestroyShaderModule(Device, Shader.Module, nullptr);
 
           SIZE_T GroupCount = ShaderGroupCreateInfos.size();
           SIZE_T GroupHandleSize = PhysicalDeviceProperties.RTPipelineProperties.shaderGroupHandleSize;
@@ -1065,11 +1031,37 @@ namespace vrt
           CameraUniformBuffer = CreateBuffer(sizeof(camera_buffer_data), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
           std::vector<vec3> Vtx = LoadOBJ("bin/models/cow.obj");
-          Primitive = CreatePrimitive<vec3>(Vtx, 0, {}, mat4::Scale(vec3(0.1)));
 
-          const primitive *Prims[] {Primitive};
+          ptr<material> Mtl = CreateMaterial("Cow", "bin/shaders/cow");
+          ptr<material> PlaneMtl = CreateMaterial("Plane", "bin/shaders/plane");
+          ptr<material> TriangleMtl = CreateMaterial("Triangle", "bin/shaders/triangle");
 
-          Scene = CreateScene("Default", Prims);
+          vec3 PlaneVtx[]
+          {
+            {-40, 0, -40},
+            { 40, 0, -40},
+            {-40, 0,  40},
+            { 40, 0,  40},
+          };
+          UINT32 PlaneIdx[] {0, 1, 2, 1, 2, 3};
+
+          ptr<primitive> Primitive = CreatePrimitive<vec3>(Mtl, Vtx, 0, {}, mat4::Scale(vec3(0.1)));
+          ptr<primitive> PlanePrim = CreatePrimitive<vec3>(PlaneMtl, PlaneVtx, 0, PlaneIdx);
+
+          vec3 TriangleVtx[3];
+          for (INT i = 0; i < 3; i++)
+          {
+            FLOAT Angle = mth::PI * (i * 0.666 + 0.5);
+
+            TriangleVtx[i] = vec3(std::cos(Angle), std::sin(Angle), 0) + vec3(0, 2, 0);
+          }
+          ptr<primitive> TrianglePrimitive = CreatePrimitive<vec3>(TriangleMtl, TriangleVtx, 0, {});
+
+          primitive *Prims[] {Primitive, PlanePrim, TrianglePrimitive};
+          ptr<model> Model = CreateModel(Prims);
+
+          model *Models[] {Model};
+          Scene = CreateScene("Default", Models);
 
           VkFenceCreateInfo FenceCreateInfo
           {
@@ -1150,7 +1142,8 @@ namespace vrt
           VkStridedDeviceAddressRegionKHR HitRegion
           {
             .deviceAddress = Scene->SBTStorageBuffer.GetDeviceAddress() + SBTAlignedGroupSize * 2,
-            .size = SBTAlignedGroupSize
+            .stride = SBTAlignedGroupSize,
+            .size = SBTAlignedGroupSize * Scene->HitShaderGroupCount,
           };
 
           VkStridedDeviceAddressRegionKHR CallableRegion {};
@@ -1250,7 +1243,6 @@ namespace vrt
 
         VOID Close( VOID )
         {
-          Primitive->Release();
           Scene->Release();
 
           vkDeviceWaitIdle(Device);

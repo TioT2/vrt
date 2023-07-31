@@ -3,7 +3,6 @@
 // Target texture
 
 [[vk::binding(0, 0)]] RWTexture2D<float4> Texture;
-// [[vk::binding(0, 1)]] SamplerState Sampler;
 
 struct vs_out
 {
