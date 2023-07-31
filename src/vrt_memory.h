@@ -123,7 +123,7 @@ namespace vrt
         // Delete all
         FlushFree();
         for (storage *stg = FirstUsed; stg != nullptr; stg = stg->Next)
-          stg->Data.~object_type();
+          OnFree(stg->Data);
 
         while (Block != nullptr)
         {
@@ -132,6 +132,7 @@ namespace vrt
           Block = Block->Next;
 
           /* REAL SHIT BELOW */
+          // to avoid destructors
           delete reinterpret_cast<BYTE *>(toDelete);
         }
 
@@ -182,23 +183,19 @@ namespace vrt
           FirstUsed = stg->Next;
           if (FirstUsed != nullptr)
             FirstUsed->Prev = nullptr;
-          stg->Next = nullptr;
         }
         else
         {
           stg->Prev->Next = stg->Next;
-          stg->Prev = nullptr;
-
           if (stg->Next != nullptr)
             stg->Next->Prev = stg->Prev;
         }
 
         if (FirstToDelete != nullptr)
-        {
           FirstToDelete->Prev = stg;
-          stg->Next = FirstToDelete;
-        }
 
+        stg->Prev = nullptr;
+        stg->Next = FirstToDelete;
         FirstToDelete = stg;
       } /* Free */
 

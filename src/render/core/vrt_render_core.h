@@ -1032,9 +1032,9 @@ namespace vrt
 
           std::vector<vec3> Vtx = LoadOBJ("bin/models/cow.obj");
 
-          ptr<material> Mtl = CreateMaterial("Cow", "bin/shaders/cow");
           ptr<material> PlaneMtl = CreateMaterial("Plane", "bin/shaders/plane");
           ptr<material> TriangleMtl = CreateMaterial("Triangle", "bin/shaders/triangle");
+          ptr<material> CowMtl = CreateMaterial("Cow", "bin/shaders/cow");
 
           vec3 PlaneVtx[]
           {
@@ -1044,9 +1044,7 @@ namespace vrt
             { 40, 0,  40},
           };
           UINT32 PlaneIdx[] {0, 1, 2, 1, 2, 3};
-
-          ptr<primitive> Primitive = CreatePrimitive<vec3>(Mtl, Vtx, 0, {}, mat4::Scale(vec3(0.1)));
-          ptr<primitive> PlanePrim = CreatePrimitive<vec3>(PlaneMtl, PlaneVtx, 0, PlaneIdx);
+          ptr<primitive> PlanePrimitive = CreatePrimitive<vec3>(PlaneMtl, PlaneVtx, 0, PlaneIdx);
 
           vec3 TriangleVtx[3];
           for (INT i = 0; i < 3; i++)
@@ -1057,10 +1055,15 @@ namespace vrt
           }
           ptr<primitive> TrianglePrimitive = CreatePrimitive<vec3>(TriangleMtl, TriangleVtx, 0, {});
 
-          primitive *Prims[] {Primitive, PlanePrim, TrianglePrimitive};
-          ptr<model> Model = CreateModel(Prims);
+          primitive * WorldPrimitives[] {PlanePrimitive, TrianglePrimitive};
+          ptr<model> WorldModel = CreateModel(WorldPrimitives);
 
-          model *Models[] {Model};
+
+          ptr<primitive> CowPrimitive = CreatePrimitive<vec3>(CowMtl, Vtx, 0, {}, mat4::Scale(vec3(0.1)));
+          primitive *CowPrimitives[] {CowPrimitive};
+          ptr<model> CowModel = CreateModel(CowPrimitives);
+
+          model *Models[] {WorldModel, CowModel};
           Scene = CreateScene("Default", Models);
 
           VkFenceCreateInfo FenceCreateInfo
