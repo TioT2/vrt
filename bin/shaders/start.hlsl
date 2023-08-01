@@ -7,6 +7,42 @@ float3 RayDirectionFromScreenCoord( float2 ScreenCoord )
   return normalize(Camera.DirectionNear.xyz + Camera.RightWidth.xyz * ScreenCoord.x + Camera.UpHeight.xyz * ScreenCoord.y);
 } /* RayDirectionFromTexCoord */
 
+float3 Trace( RayDesc Ray )
+{
+  ray_payload Payload;
+
+  Payload.Color = float4(0, 0, 0, 0);
+  Payload.DoHit = true;
+  Payload.RecursionDepth = 1;
+
+  TraceRay(Scene, 0, ~0, 0, 1, 0, Ray, Payload);
+
+  float ShadowCoefficent = 1.0;
+  if (Payload.DoHit)
+  {
+    const float3 LightDirection = normalize(float3(1, 1, 1));
+
+    ray_payload ShadowRayPayload;
+
+    ShadowRayPayload.Color = float4(0, 0, 0, 0);
+    ShadowRayPayload.DoHit = true;
+
+    RayDesc ShadowRay;
+
+    ShadowRay.Origin = Payload.HitPosition + LightDirection * 0.001;
+    ShadowRay.Direction = LightDirection;
+
+    ShadowRay.TMin = 0;
+    ShadowRay.TMax = 500;
+
+    TraceRay(Scene, 0, ~0, 0, 1, 0, ShadowRay, ShadowRayPayload);
+
+    ShadowCoefficent = float(!ShadowRayPayload.DoHit) * 0.8 + 0.2;
+  }
+
+  return Payload.Color * ShadowCoefficent;
+} /* Trace */
+
 [shader("raygeneration")]
 void rrs_main( void )
 {
@@ -19,33 +55,28 @@ void rrs_main( void )
 
   RayDesc Ray;
   Ray.Origin = Camera.Location.xyz;
-  Ray.Direction = RayDirectionFromScreenCoord(FragCoord);//float3(0, 0, -1);
+  Ray.Direction = RayDirectionFromScreenCoord(FragCoord);
 
   Ray.TMin = 0;
   Ray.TMax = 100;
 
-  // some MSAA
-  float4 Color = float4(0, 0, 0, 0);
+  float3 Color = float3(0, 0, 0);
   for (int y = -1; y <= 1; y++)
     for (int x = -1; x <= 1; x++)
     {
       RayDesc SubRay = Ray;
-      ray_payload Payload;
 
-      Payload.Color = float4(0, 0, 0, 0);
-      SubRay.Origin = Camera.Location.xyz;
       SubRay.Direction = RayDirectionFromScreenCoord(FragCoord + PixelSize / 3.0 * float2(x, y));
-
-      TraceRay(Scene, 0, ~0, 0, 1, 0, SubRay, Payload);
-
-      Color += Payload.Color;
+      
+      Color += Trace(SubRay);
     }
 
-  Target[DispatchRaysIndex().xy] = Color / 9;
+  Target[DispatchRaysIndex().xy] = float4(Color / 9, 1);
 } /* rrs_main */
 
 [shader("miss")]
 void rms_main( inout ray_payload Payload )
 {
-  Payload.Color = float4(0.30, 0.47, 0.80, 0.0);
+  Payload.Color = float4((WorldRayDirection() + 1) / 2, 1.0);
+  Payload.DoHit = false;
 } /* rms_main */

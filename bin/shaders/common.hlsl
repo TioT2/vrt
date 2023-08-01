@@ -21,5 +21,8 @@ typedef BuiltInTriangleIntersectionAttributes attributes;
 
 struct [raypayload] ray_payload
 {
-  float4 Color;
+  float3 Color;
+  int RecursionDepth;
+  float3 HitPosition;
+  bool DoHit;
 };

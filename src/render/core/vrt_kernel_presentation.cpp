@@ -505,6 +505,6 @@ namespace vrt::render::core
     RewriteTargetImage.dstSet = Scene->DescriptorSet;
     vkUpdateDescriptorSets(Device, 1, &RewriteTargetImage, 0, nullptr);
 
-    Camera.SetAspect(SwapchainImageExtent.width, SwapchainImageExtent.height);
+    Camera.SetAspect((FLOAT)SwapchainImageExtent.width, (FLOAT)SwapchainImageExtent.height);
   } /* Resize */
 } /* namespace rtt::render */

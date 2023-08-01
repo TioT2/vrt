@@ -249,8 +249,8 @@ namespace vrt
           KeyStates[i].Old = KeyStates[i].Pressed;
           KeyStates[i].Pressed = keys[i];
 
-          KeyStates[i].Clicked = (KeyStates[i].Pressed & !KeyStates[i].Old);
-          KeyStates[i].Released = (!KeyStates[i].Pressed & KeyStates[i].Old);
+          KeyStates[i].Clicked =  (KeyStates[i].Pressed && !KeyStates[i].Old    );
+          KeyStates[i].Released = (KeyStates[i].Old     && !KeyStates[i].Pressed);
         }
       } /* response */
 

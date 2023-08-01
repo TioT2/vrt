@@ -209,12 +209,7 @@ namespace vrt
       public:
         component Data[4][4];
 
-        mat4( VOID ) : Data {
-            {1, 0, 0, 0},
-            {0, 1, 0, 0},
-            {0, 0, 1, 0},
-            {0, 0, 0, 1}
-          }
+        mat4( VOID )
         {
 
         } /* mat4 */
@@ -338,7 +333,7 @@ namespace vrt
           mat4 r;
 
           if (det == 0)
-            return mat4();
+            return mat4::Identity();
 
           r.Data[0][0] =
             +MatrDeterm3x3(Data[1][1], Data[1][2], Data[1][3],
@@ -584,7 +579,18 @@ namespace vrt
         vec3<component> operator*( const vec3<component> &V ) const
         {
           return Transform4x4(V);
-        } /* operator* */
+        } /* End of 'operator*' function */
+
+        constexpr static mat4 Identity( VOID )
+        {
+          return mat4
+          (
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1
+          );
+        } /* mat4 */
 
         /* Orthographical projection matrixix
          * ARGUMENTS:

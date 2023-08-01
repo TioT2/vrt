@@ -159,7 +159,7 @@ namespace vrt
         SIZE_T VertexCount = 0;
         buffer IndexBuffer {};
         SIZE_T IndexCount = 0;
-        mat4 TrasnformMatrix;
+        mat4 TrasnformMatrix = mat4::Identity();
 
         ~primitive( VOID ) override;
       }; /* primitive */
@@ -167,7 +167,7 @@ namespace vrt
       class model : public resource<UINT32>
       {
       public:
-        mat4 TransformMatrix;
+        mat4 TransformMatrix = mat4::Identity();
 
         kernel *Kernel = nullptr;
 
@@ -193,12 +193,14 @@ namespace vrt
         VkDescriptorPool DescriptorPool = VK_NULL_HANDLE;
         VkDescriptorSet DescriptorSet = VK_NULL_HANDLE;
 
-        SIZE_T HitShaderGroupCount = 0;
 
         buffer TLASStorageBuffer {};
         buffer InstanceBuffer {};
         SIZE_T InstanceCount = 0;
+
+        SIZE_T SBTAlignedGroupSize = 0;
         buffer SBTStorageBuffer; // Shader binding table storage buffer
+        SIZE_T HitShaderGroupCount = 0;
 
         /* Scene destructor */
         ~scene( VOID );
@@ -380,9 +382,6 @@ namespace vrt
 
         scene *Scene = nullptr;
 
-        // buffer SBTStorageBuffer;
-        SIZE_T SBTAlignedGroupSize = 0;
-
         material * CreateMaterial( const std::string &MaterialName, std::string_view ShaderName )
         {
           material *Mtl = manager<material, std::string>::CreateResource(MaterialName);
@@ -398,7 +397,7 @@ namespace vrt
         } /* CreateMaterial */
 
         template <typename vertex_type>
-          primitive * CreatePrimitive( material *Material, std::span<const vertex_type> Vertices, SIZE_T PositionComponentOffset, std::span<const UINT32> Indices, const mat4 &TransformMatrix = mat4() )
+          primitive * CreatePrimitive( material *Material, std::span<const vertex_type> Vertices, SIZE_T PositionComponentOffset, std::span<const UINT32> Indices, const mat4 &TransformMatrix = mat4::Identity() )
           {
             primitive *Primitive = manager<primitive>::CreateResource();
 
@@ -431,9 +430,9 @@ namespace vrt
           } /* CreatePrimitive */
 
         /* @brief Model creating function.
-         * @param[in] std::span<primitive *> Primitives - array of primitives that this model include
+         * @param[in] std::span<primitive *> Primitives - array of that this model include
          */
-        model * CreateModel( std::span<primitive *> Primitives, mat4 TransformMatrix = mat4() )
+        model * CreateModel( std::span<primitive *> Primitives, mat4 TransformMatrix = mat4::Identity() )
         {
           model *Model = manager<model>::CreateResource();
 
@@ -504,7 +503,7 @@ namespace vrt
 
           GeometryPrimitiveCounts.resize(Primitives.size());
           for (UINT32 i = 0; i < GeometryPrimitiveCounts.size(); i++)
-            GeometryPrimitiveCounts[i] = std::max(Primitives[i]->VertexCount, Primitives[i]->IndexCount) / 3;
+            GeometryPrimitiveCounts[i] = (UINT32)std::max<SIZE_T>(Primitives[i]->VertexCount, Primitives[i]->IndexCount) / 3;
 
           VkAccelerationStructureBuildSizesInfoKHR BuildSizesInfo {VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
 
@@ -867,7 +866,7 @@ namespace vrt
           };
 
           for (UINT32 i = 0; i < Scene->HitShaderGroupCount; i++)
-            ShaderGroupCreateInfos[i + 2] = VkRayTracingShaderGroupCreateInfoKHR
+            ShaderGroupCreateInfos[(SIZE_T)i + 2] = VkRayTracingShaderGroupCreateInfoKHR
             {
               .sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
               .pNext = nullptr,
@@ -918,7 +917,7 @@ namespace vrt
           SIZE_T GroupHandleSize = PhysicalDeviceProperties.RTPipelineProperties.shaderGroupHandleSize;
 
           SIZE_T AlignedGroupSize = utils::Align(GroupHandleSize, PhysicalDeviceProperties.RTPipelineProperties.shaderGroupBaseAlignment);
-          SBTAlignedGroupSize = AlignedGroupSize;
+          Scene->SBTAlignedGroupSize = AlignedGroupSize;
 
           SIZE_T SBTSize = GroupCount * AlignedGroupSize;
 
@@ -927,20 +926,27 @@ namespace vrt
 
           utils::AssertResult(vkGetRayTracingShaderGroupHandlesKHR(Device, Scene->Pipeline, 0, (UINT32)GroupCount, SBTSize, ShaderHandleStorage.data()));
 
-          Scene->SBTStorageBuffer = CreateBuffer
+          buffer SBTStagingBuffer = CreateBuffer
           (
             SBTSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
           );
 
-          BYTE *Data = reinterpret_cast<BYTE *>(Scene->SBTStorageBuffer.MapMemory());
+          Scene->SBTStorageBuffer = CreateBuffer(SBTSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+          /* Aligning data */
+          BYTE *Data = reinterpret_cast<BYTE *>(SBTStagingBuffer.MapMemory());
           for (SIZE_T g = 0; g < GroupCount; g++)
           {
             std::memcpy(Data, ShaderHandleStorage.data() + g * GroupHandleSize, GroupHandleSize);
             Data += AlignedGroupSize;
           }
-          Scene->SBTStorageBuffer.UnmapMemory();
+          SBTStagingBuffer.UnmapMemory();
+
+          SBTStagingBuffer.CopyTo(Scene->SBTStorageBuffer);
+
+          Destroy(SBTStagingBuffer);
 
           return Scene;
         } /* CreateScene */
@@ -970,7 +976,6 @@ namespace vrt
             return {};
 
           std::vector<vec3> Vertices;
-
           std::vector<vec3> Positions;
 
           CHAR Buffer[256];
@@ -1038,10 +1043,10 @@ namespace vrt
 
           vec3 PlaneVtx[]
           {
-            {-40, 0, -40},
-            { 40, 0, -40},
-            {-40, 0,  40},
-            { 40, 0,  40},
+            {-128, 0, -128},
+            { 128, 0, -128},
+            {-128, 0,  128},
+            { 128, 0,  128},
           };
           UINT32 PlaneIdx[] {0, 1, 2, 1, 2, 3};
           ptr<primitive> PlanePrimitive = CreatePrimitive<vec3>(PlaneMtl, PlaneVtx, 0, PlaneIdx);
@@ -1059,7 +1064,7 @@ namespace vrt
           ptr<model> WorldModel = CreateModel(WorldPrimitives);
 
 
-          ptr<primitive> CowPrimitive = CreatePrimitive<vec3>(CowMtl, Vtx, 0, {}, mat4::Scale(vec3(0.1)));
+          ptr<primitive> CowPrimitive = CreatePrimitive<vec3>(CowMtl, Vtx, 0, {}, mat4::Scale(vec3(0.1f)));
           primitive *CowPrimitives[] {CowPrimitive};
           ptr<model> CowModel = CreateModel(CowPrimitives);
 
@@ -1132,21 +1137,21 @@ namespace vrt
 
           VkStridedDeviceAddressRegionKHR RayGenRegion
           {
-            .deviceAddress = Scene->SBTStorageBuffer.GetDeviceAddress() + SBTAlignedGroupSize * 0,
-            .stride = SBTAlignedGroupSize,
-            .size = SBTAlignedGroupSize,
+            .deviceAddress = Scene->SBTStorageBuffer.GetDeviceAddress() + Scene->SBTAlignedGroupSize * 0,
+            .stride = Scene->SBTAlignedGroupSize,
+            .size = Scene->SBTAlignedGroupSize,
           };
           VkStridedDeviceAddressRegionKHR MissRegion
           {
-            .deviceAddress = Scene->SBTStorageBuffer.GetDeviceAddress() + SBTAlignedGroupSize * 1,
-            .stride = SBTAlignedGroupSize,
-            .size = SBTAlignedGroupSize,
+            .deviceAddress = Scene->SBTStorageBuffer.GetDeviceAddress() + Scene->SBTAlignedGroupSize * 1,
+            .stride = Scene->SBTAlignedGroupSize,
+            .size = Scene->SBTAlignedGroupSize,
           };
           VkStridedDeviceAddressRegionKHR HitRegion
           {
-            .deviceAddress = Scene->SBTStorageBuffer.GetDeviceAddress() + SBTAlignedGroupSize * 2,
-            .stride = SBTAlignedGroupSize,
-            .size = SBTAlignedGroupSize * Scene->HitShaderGroupCount,
+            .deviceAddress = Scene->SBTStorageBuffer.GetDeviceAddress() + Scene->SBTAlignedGroupSize * 2,
+            .stride = Scene->SBTAlignedGroupSize,
+            .size = Scene->SBTAlignedGroupSize * Scene->HitShaderGroupCount,
           };
 
           VkStridedDeviceAddressRegionKHR CallableRegion {};

@@ -20,6 +20,8 @@ namespace vrt::render::core
   {
     buffer Buffer {this};
 
+    Buffer.Size = Size;
+
     VkBufferCreateInfo CreateInfo
     {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -47,7 +49,6 @@ namespace vrt::render::core
     VkMemoryRequirements MemoryRequirements;
     vkGetBufferMemoryRequirements(Device, Buffer.Buffer, &MemoryRequirements);
     Buffer.MemoryTypeIndex = FindMemoryType(MemoryRequirements.memoryTypeBits, MemoryPropertyFlags);
-    Buffer.Size = MemoryRequirements.size;
 
     // VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT 
     VkMemoryAllocateFlagsInfo AllocateFlagsInfo
@@ -62,7 +63,7 @@ namespace vrt::render::core
     {
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
       .pNext = &AllocateFlagsInfo,
-      .allocationSize = Buffer.Size,
+      .allocationSize = MemoryRequirements.size,
       .memoryTypeIndex = Buffer.MemoryTypeIndex,
     };
 
