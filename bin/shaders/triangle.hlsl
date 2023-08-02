@@ -1,6 +1,6 @@
 /**/
 
-#include <common.hlsl>
+#include <common.hlsli>
 
 [shader("closesthit")]
 void rcs_main( inout ray_payload Payload, in attributes Attributes )

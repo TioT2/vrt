@@ -7,13 +7,12 @@ namespace vrt
 {
   namespace render
   {
-    // class engine : public core::kernel
-    // {
-    // 
-    // }; /* engine */
     using namespace core;
 
-    using engine = kernel;
+    class engine : public core::kernel
+    {
+
+    }; /* engine */
   } /* render */
 } /* vrt */
 

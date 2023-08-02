@@ -93,6 +93,7 @@ namespace vrt::render::core
           L"-fspv-target-env=vulkan1.3",
           L"-fspv-extension=SPV_KHR_ray_tracing",
           L"-fspv-extension=SPV_KHR_ray_query",
+          L"-fspv-extension=SPV_KHR_physical_storage_buffer",
         };
 
         IDxcResult *ModuleCompilationResult = nullptr;

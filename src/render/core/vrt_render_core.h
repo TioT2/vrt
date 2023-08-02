@@ -269,6 +269,7 @@ namespace vrt
         std::vector<const CHAR *> EnabledDeviceExtensions
         {
           VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+          VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
           VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
           VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
           VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
@@ -828,16 +829,21 @@ namespace vrt
             /* const char*                      */ .pName = "rms_main"
           };
 
-          SIZE_T i = 2;
+          SIZE_T i = 0;
+          std::vector<primitive *> Primitives {Scene->HitShaderGroupCount};
           for (SIZE_T m = 0; m < Models.size(); m++)
             for (SIZE_T p = 0; p < Models[m]->Primitives.size(); p++)
-              ShaderStageCreateInfos[i++] = VkPipelineShaderStageCreateInfo
+            {
+              Primitives[i] = Models[m]->Primitives[p];
+              ShaderStageCreateInfos[i + 2] = VkPipelineShaderStageCreateInfo
               {
                 /* VkStructureType                  */ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                 /* VkShaderStageFlagBits            */ .stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
                 /* VkShaderModule                   */ .module = Models[m]->Primitives[p]->Material->ClosestHitShader,
                 /* const char*                      */ .pName = rt_shader::GetModuleTypeEntryPointName(rt_shader::module_type::CLOSEST_HIT),
               };
+              i++;
+            }
 
           /* Shader gropus */
           std::vector<VkRayTracingShaderGroupCreateInfoKHR> ShaderGroupCreateInfos {Scene->HitShaderGroupCount + 2};
@@ -914,12 +920,12 @@ namespace vrt
           vkDestroyShaderModule(Device, Shader.Module, nullptr);
 
           SIZE_T GroupCount = ShaderGroupCreateInfos.size();
+          // Size of one group, here I can append any additional shit.
           SIZE_T GroupHandleSize = PhysicalDeviceProperties.RTPipelineProperties.shaderGroupHandleSize;
 
-          SIZE_T AlignedGroupSize = utils::Align(GroupHandleSize, PhysicalDeviceProperties.RTPipelineProperties.shaderGroupBaseAlignment);
-          Scene->SBTAlignedGroupSize = AlignedGroupSize;
+          Scene->SBTAlignedGroupSize = utils::Align(GroupHandleSize, PhysicalDeviceProperties.RTPipelineProperties.shaderGroupBaseAlignment);
 
-          SIZE_T SBTSize = GroupCount * AlignedGroupSize;
+          SIZE_T SBTSize = GroupCount * Scene->SBTAlignedGroupSize;
 
           std::vector<BYTE> ShaderHandleStorage;
           ShaderHandleStorage.resize(SBTSize);
@@ -937,11 +943,26 @@ namespace vrt
 
           /* Aligning data */
           BYTE *Data = reinterpret_cast<BYTE *>(SBTStagingBuffer.MapMemory());
+
           for (SIZE_T g = 0; g < GroupCount; g++)
           {
-            std::memcpy(Data, ShaderHandleStorage.data() + g * GroupHandleSize, GroupHandleSize);
-            Data += AlignedGroupSize;
+            std::memcpy(Data + g * Scene->SBTAlignedGroupSize, ShaderHandleStorage.data() + g * GroupHandleSize, GroupHandleSize);
           }
+
+          for (SIZE_T p = 0; p < Primitives.size(); p++)
+          {
+            struct primitive_info
+            {
+              UINT64 VertexBufferPtr;
+              UINT64 IndexBufferPtr;
+              UINT32 VertexSize;
+            } *PrimitiveInfo = reinterpret_cast<primitive_info *>(Data + (p + 2) * Scene->SBTAlignedGroupSize + GroupHandleSize);
+
+            PrimitiveInfo->VertexBufferPtr = Primitives[p]->VertexBuffer.GetDeviceAddress();
+            PrimitiveInfo->IndexBufferPtr = Primitives[p]->IndexCount == 0 ? 0 : Primitives[p]->IndexBuffer.GetDeviceAddress();
+            PrimitiveInfo->VertexSize = Primitives[p]->VertexSize;
+          }
+
           SBTStagingBuffer.UnmapMemory();
 
           SBTStagingBuffer.CopyTo(Scene->SBTStorageBuffer);
@@ -968,15 +989,25 @@ namespace vrt
           return Result == VK_SUCCESS ? ShaderModule : VK_NULL_HANDLE;
         } /* CreateInfo */
 
-        std::vector<vec3> LoadOBJ( std::string_view Path )
+        struct small_vertex
+        {
+          vec3 Position;
+          vec2 TexCoord;
+          vec3 Normal;
+        }; /* vertex */
+
+        static std::vector<small_vertex> LoadOBJ( std::string_view Path )
         {
           std::FILE * File = std::fopen(Path.data(), "r");
 
           if (File == nullptr)
             return {};
 
-          std::vector<vec3> Vertices;
+          std::vector<small_vertex> Vertices;
+
           std::vector<vec3> Positions;
+          std::vector<vec2> TexCoords;
+          std::vector<vec3> Normals;
 
           CHAR Buffer[256];
 
@@ -999,15 +1030,34 @@ namespace vrt
               Positions.back().Z = std::strtof(Splitter.Get().data(), &End);
               break;
 
+            case "vt"_word:
+              TexCoords.push_back(vec2());
+
+              TexCoords.back().X = std::strtof(Splitter.Get().data(), &End);
+              TexCoords.back().Y = std::strtof(Splitter.Get().data(), &End);
+              break;
+
+            case "vn"_word:
+              Normals.push_back(vec3());
+
+              Normals.back().X = std::strtof(Splitter.Get().data(), &End);
+              Normals.back().Y = std::strtof(Splitter.Get().data(), &End);
+              Normals.back().Z = std::strtof(Splitter.Get().data(), &End);
+              break;
+
             case "f "_word:
               for (INT i = 0; i < 3; i++)
               {
-                Vertices.push_back(vec3());
+                Vertices.push_back(small_vertex {});
 
                 FacetSplitter = utils::splitter(Splitter.Get(), '/');
                 SIZE_T PositionIndex = static_cast<SIZE_T>(std::strtol(FacetSplitter.Get().data(), &End, 10));
+                SIZE_T TexCoordIndex = static_cast<SIZE_T>(std::strtol(FacetSplitter.Get().data(), &End, 10));
+                SIZE_T NormalIndex   = static_cast<SIZE_T>(std::strtol(FacetSplitter.Get().data(), &End, 10));
 
-                Vertices.back() = (PositionIndex == 0 ? vec3() : Positions[PositionIndex - 1]);
+                Vertices.back().Position = (PositionIndex == 0 ? vec3() : Positions[PositionIndex - 1]);
+                Vertices.back().TexCoord = (TexCoordIndex == 0 ? vec2() : TexCoords[TexCoordIndex - 1]);
+                Vertices.back().Normal   = (NormalIndex   == 0 ? vec3() : Normals  [NormalIndex   - 1]);
               }
               break;
             }
@@ -1035,7 +1085,7 @@ namespace vrt
           // First-triangle functions
           CameraUniformBuffer = CreateBuffer(sizeof(camera_buffer_data), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-          std::vector<vec3> Vtx = LoadOBJ("bin/models/cow.obj");
+          std::vector<small_vertex> Vtx = LoadOBJ("bin/models/cow.obj");
 
           ptr<material> PlaneMtl = CreateMaterial("Plane", "bin/shaders/plane");
           ptr<material> TriangleMtl = CreateMaterial("Triangle", "bin/shaders/triangle");
@@ -1058,15 +1108,18 @@ namespace vrt
 
             TriangleVtx[i] = vec3(std::cos(Angle), std::sin(Angle), 0) + vec3(0, 2, 0);
           }
-          ptr<primitive> TrianglePrimitive = CreatePrimitive<vec3>(TriangleMtl, TriangleVtx, 0, {});
 
+          ptr<primitive> TrianglePrimitive = CreatePrimitive<vec3>(TriangleMtl, TriangleVtx, 0, {});
           primitive * WorldPrimitives[] {PlanePrimitive, TrianglePrimitive};
           ptr<model> WorldModel = CreateModel(WorldPrimitives);
 
 
-          ptr<primitive> CowPrimitive = CreatePrimitive<vec3>(CowMtl, Vtx, 0, {}, mat4::Scale(vec3(0.1f)));
+          ptr<primitive> CowPrimitive = CreatePrimitive<small_vertex>(CowMtl, Vtx, 0, {}, mat4::Scale(vec3(0.1f)));
+          CowPrimitive->TrasnformMatrix = mat4::Scale(vec3(0.3, 0.1, 0.3));
           primitive *CowPrimitives[] {CowPrimitive};
           ptr<model> CowModel = CreateModel(CowPrimitives);
+
+          // CowModel->TransformMatrix = mat4::Scale(vec3(0.3, 0.1, 0.3));
 
           model *Models[] {WorldModel, CowModel};
           Scene = CreateScene("Default", Models);
@@ -1100,10 +1153,11 @@ namespace vrt
           vkWaitForFences(Device, 1, &InFlightFence, VK_TRUE, UINT64_MAX);
           vkResetFences(Device, 1, &InFlightFence);
 
-          // recreate frame
+          // get image
           UINT32 ImageIndex = UINT32_MAX;
           VkResult result = vkAcquireNextImageKHR(Device, Swapchain, UINT64_MAX, ImageAvailableSemaphore, VK_NULL_HANDLE, &ImageIndex);
 
+          /* no image - no render. */
           if (result != VK_SUCCESS)
             return;
 

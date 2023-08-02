@@ -1,6 +1,6 @@
 /**/
 
-#include <common.hlsl>
+#include <common.hlsli>
 
 float3 RayDirectionFromScreenCoord( float2 ScreenCoord )
 {
@@ -9,27 +9,28 @@ float3 RayDirectionFromScreenCoord( float2 ScreenCoord )
 
 float3 Trace( RayDesc Ray )
 {
+  const float3 LightDirection = normalize(float3(1, 1, 1));
   ray_payload Payload;
 
-  Payload.Color = float4(0, 0, 0, 0);
+  Payload.Color = float3(0, 0, 0);
   Payload.DoHit = true;
   Payload.RecursionDepth = 1;
+  Payload.HitNormal = LightDirection;
 
   TraceRay(Scene, 0, ~0, 0, 1, 0, Ray, Payload);
 
   float ShadowCoefficent = 1.0;
+
   if (Payload.DoHit)
   {
-    const float3 LightDirection = normalize(float3(1, 1, 1));
-
     ray_payload ShadowRayPayload;
 
-    ShadowRayPayload.Color = float4(0, 0, 0, 0);
+    ShadowRayPayload.Color = float3(0, 0, 0);
     ShadowRayPayload.DoHit = true;
 
     RayDesc ShadowRay;
 
-    ShadowRay.Origin = Payload.HitPosition + LightDirection * 0.001;
+    ShadowRay.Origin = Payload.HitPosition + Payload.HitNormal * 0.001 + LightDirection * 0.001;
     ShadowRay.Direction = LightDirection;
 
     ShadowRay.TMin = 0;
@@ -37,17 +38,17 @@ float3 Trace( RayDesc Ray )
 
     TraceRay(Scene, 0, ~0, 0, 1, 0, ShadowRay, ShadowRayPayload);
 
-    ShadowCoefficent = float(!ShadowRayPayload.DoHit) * 0.8 + 0.2;
+    ShadowCoefficent = float(!ShadowRayPayload.DoHit) * 0.6 + 0.4;
   }
 
-  return Payload.Color * ShadowCoefficent;
+  return Payload.Color * ShadowCoefficent * clamp(dot(LightDirection, Payload.HitNormal), 0.2, 1.0);
 } /* Trace */
 
 [shader("raygeneration")]
 void rrs_main( void )
 {
   float2 PixelSize = float2(1, 1) / (float2)DispatchRaysDimensions();
-  float2 FragCoord = (float2)DispatchRaysIndex() * PixelSize;
+  float2 FragCoord = ((float2)DispatchRaysIndex() + 0.5) * PixelSize;
 
   // vulkan...
   FragCoord.y = 1 - FragCoord.y;
@@ -77,6 +78,6 @@ void rrs_main( void )
 [shader("miss")]
 void rms_main( inout ray_payload Payload )
 {
-  Payload.Color = float4((WorldRayDirection() + 1) / 2, 1.0);
+  Payload.Color = 0;
   Payload.DoHit = false;
 } /* rms_main */
