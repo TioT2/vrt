@@ -22,5 +22,7 @@ vs_out vs_main( const int VertexID : SV_VertexID )
 
 float4 ps_main( const vs_out In ) : SV_Target0
 {
-  return Texture[(uint2)In.Position.xy].xyzw; /* yey, das't all i wanna do */
+  float4 Value = Texture[(uint2)In.Position.xy].xyzw;
+
+  return Value / (Value + 1); /* TONE MAPPING JOPTIT' */
 } /* ps_main */

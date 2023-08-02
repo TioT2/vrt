@@ -1,6 +1,7 @@
 /**/
 
 #include <common.hlsli>
+#include <pbr.hlsli>
 
 float3 RayDirectionFromScreenCoord( float2 ScreenCoord )
 {
@@ -19,29 +20,14 @@ float3 Trace( RayDesc Ray )
 
   TraceRay(Scene, 0, ~0, 0, 1, 0, Ray, Payload);
 
-  float ShadowCoefficent = 1.0;
-
   if (Payload.DoHit)
   {
-    ray_payload ShadowRayPayload;
-
-    ShadowRayPayload.Color = float3(0, 0, 0);
-    ShadowRayPayload.DoHit = true;
-
-    RayDesc ShadowRay;
-
-    ShadowRay.Origin = Payload.HitPosition + Payload.HitNormal * 0.001 + LightDirection * 0.001;
-    ShadowRay.Direction = LightDirection;
-
-    ShadowRay.TMin = 0;
-    ShadowRay.TMax = 500;
-
-    TraceRay(Scene, 0, ~0, 0, 1, 0, ShadowRay, ShadowRayPayload);
-
-    ShadowCoefficent = float(!ShadowRayPayload.DoHit) * 0.6 + 0.4;
+    return
+      PBR_Shade(Payload.HitPosition, Payload.HitNormal, Camera.Location.xyz, float3(-16, 16, 16), float3(100, 50, 000), Payload.Color, Payload.Metallicness, Payload.Roughness) +
+      PBR_Shade(Payload.HitPosition, Payload.HitNormal, Camera.Location.xyz, float3(16, 16, 16),  float3(50, 50, 50), Payload.Color, Payload.Metallicness, Payload.Roughness) +
+      PBR_Shade(Payload.HitPosition, Payload.HitNormal, Camera.Location.xyz, float3(16, 16, -16), float3(000, 50, 100), Payload.Color, Payload.Metallicness, Payload.Roughness);
   }
-
-  return Payload.Color * ShadowCoefficent * clamp(dot(LightDirection, Payload.HitNormal), 0.2, 1.0);
+  return Payload.Color;
 } /* Trace */
 
 [shader("raygeneration")]

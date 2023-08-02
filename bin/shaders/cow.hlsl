@@ -47,17 +47,41 @@ vertex GetVertex( float3 B )
     v1 = vk::RawBufferLoad<input_vertex>(PrimitiveInfo.VertexBufferPtr + PrimitiveInfo.VertexSize * (FirstIndex + 1)),
     v2 = vk::RawBufferLoad<input_vertex>(PrimitiveInfo.VertexBufferPtr + PrimitiveInfo.VertexSize * (FirstIndex + 2));
   vertex v;
-  v.Position = v0.Position() * B.x + v1.Position() * B.y + v2.Position() * B.z;
-  v.TexCoord = v0.TexCoord() * B.x + v1.TexCoord() * B.y + v2.TexCoord() * B.z;
-  v.Normal   = v0.Normal()   * B.x + v1.Normal()   * B.y + v2.Normal()   * B.z;
+  // v.Position = v0.Position() * B.x + v1.Position() * B.y + v2.Position() * B.z;
+  // v.TexCoord = v0.TexCoord() * B.x + v1.TexCoord() * B.y + v2.TexCoord() * B.z;
+  // v.Normal   = v0.Normal()   * B.x + v1.Normal()   * B.y + v2.Normal()   * B.z;
 
   return v;
 } /* GetVertex */
 
+float3 GetNormal( float3 B )
+{
+  uint64_t FirstIndex = PrimitiveIndex() * 3;
+  const uint64_t NormalOffset = 20;
+
+  return normalize(vk::RawBufferLoad<float3>(PrimitiveInfo.VertexBufferPtr + NormalOffset + PrimitiveInfo.VertexSize * (FirstIndex + 0)) * B.x +
+                   vk::RawBufferLoad<float3>(PrimitiveInfo.VertexBufferPtr + NormalOffset + PrimitiveInfo.VertexSize * (FirstIndex + 1)) * B.y +
+                   vk::RawBufferLoad<float3>(PrimitiveInfo.VertexBufferPtr + NormalOffset + PrimitiveInfo.VertexSize * (FirstIndex + 2)) * B.z);
+} /* GetNormal */
+
+float3 CalculateNormal( float3 B )
+{
+  uint64_t FirstIndex = PrimitiveIndex() * 3;
+
+  float3
+    P0 = vk::RawBufferLoad<float3>(PrimitiveInfo.VertexBufferPtr + PrimitiveInfo.VertexSize * (FirstIndex + 0)),
+    P1 = vk::RawBufferLoad<float3>(PrimitiveInfo.VertexBufferPtr + PrimitiveInfo.VertexSize * (FirstIndex + 1)),
+    P2 = vk::RawBufferLoad<float3>(PrimitiveInfo.VertexBufferPtr + PrimitiveInfo.VertexSize * (FirstIndex + 2));
+
+  return normalize(cross(P1 - P0, P2 - P0));
+} /* GetNormal */
+
 [shader("closesthit")]
 void rcs_main( inout ray_payload Payload, in attributes Attributes )
 {
-  Payload.HitNormal = GetVertex(float3(1 - Attributes.barycentrics.x - Attributes.barycentrics.y, Attributes.barycentrics.xy)).Normal;
+  Payload.HitNormal = CalculateNormal(1);//GetNormal(float3(1 - Attributes.barycentrics.x - Attributes.barycentrics.y, Attributes.barycentrics.xy));
   Payload.Color = float3(1, 1, 1);
+  Payload.Roughness = 0.3;
+  Payload.Metallicness = 1.0;
   Payload.HitPosition = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
 } /* rcs_main */

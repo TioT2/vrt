@@ -24,11 +24,18 @@ typedef BuiltInTriangleIntersectionAttributes attributes;
 
 struct [raypayload] ray_payload
 {
-  float3 Color;
+  // basic values
   int RecursionDepth;
+
+  // hit info
   float3 HitPosition;
   bool DoHit;
   float3 HitNormal;
+
+  // material
+  float Metallicness;
+  float3 Color;
+  float Roughness;
 };
 
 /* PerPrimitive data */
