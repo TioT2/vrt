@@ -47,14 +47,6 @@ namespace vrt::render::core
     vkCreateDebugUtilsMessengerEXT(Instance, &DebugMessengerCreateInfo, nullptr, &DebugMessenger);
   } /* InitInstance */
 
-  VOID kernel::InitializePresentResources( VOID )
-  {
-    InitializeSwapchain();
-    InitializePresentRenderPass();
-    InitializeFramebuffers();
-    InitializeTarget();
-  } /* InitializePresent */
-
   VOID kernel::InitializeCommandPools( VOID )
   {
     VkCommandPoolCreateInfo CreateInfo

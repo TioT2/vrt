@@ -227,6 +227,11 @@ namespace vrt
         vec3 Normal;
       }; /* vertex */
 
+      struct present_buffer_data
+      {
+        UINT32 CollectionFrameCount;
+      }; /* present_buffer_data */
+
       struct topology
       {
         std::vector<small_vertex> Vertices;
@@ -528,6 +533,10 @@ namespace vrt
         /* ... */
 
         image TargetImage;
+        buffer PresentBuffer;
+
+        BOOL DoPresentCollection = FALSE;
+
         VkSampler TargetImageSampler = VK_NULL_HANDLE;
         VkRenderPass PresentRenderPass = VK_NULL_HANDLE;
         VkDescriptorSetLayout PresentDescriptorSetLayout = VK_NULL_HANDLE;
@@ -737,7 +746,11 @@ namespace vrt
             {
               .Position = vec3(16, 16, -16),
               .Color    = vec3(000, 50, 100),
-            }
+            },
+            // {
+            //   .Position = vec3(0, 15, 0),
+            //   .Color = vec3(0, 200, 0)
+            // }
           };
           Scene->LightStorageBuffer = CreateBuffer(sizeof(point_light) * Scene->Lights.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
           Scene->LightStorageBuffer.WriteData(Scene->Lights.data(), sizeof(point_light) * Scene->Lights.size());
@@ -1209,7 +1222,6 @@ namespace vrt
           InitializePresentResources();
           InitializePresentPipeline();
 
-          topology CowTpl = topology::LoadOBJ("bin/models/cow.obj");
 
           ptr<material> PlaneMtl = CreateMaterial("Plane", "bin/shaders/plane");
           ptr<material> TriangleMtl = CreateMaterial("Triangle", "bin/shaders/triangle");
@@ -1223,7 +1235,6 @@ namespace vrt
             { 128, 0,  128},
           };
           UINT32 PlaneIdx[] {0, 1, 2, 1, 2, 3};
-          ptr<primitive> PlanePrimitive = CreatePrimitive<vec3>(PlaneMtl, PlaneVtx, 0, PlaneIdx);
 
           vec3 TriangleVtx[3];
           for (INT i = 0; i < 3; i++)
@@ -1232,12 +1243,14 @@ namespace vrt
 
             TriangleVtx[i] = vec3(std::cos(Angle), std::sin(Angle), 0) + vec3(0, 2, 0);
           }
+          ptr<primitive> PlanePrimitive = CreatePrimitive<vec3>(PlaneMtl, PlaneVtx, 0, PlaneIdx);
 
           ptr<primitive> TrianglePrimitive = CreatePrimitive<vec3>(TriangleMtl, TriangleVtx, 0, {});
           primitive * WorldPrimitives[] {PlanePrimitive, TrianglePrimitive};
           ptr<model> WorldModel = CreateModel(WorldPrimitives);
 
 
+          topology CowTpl = topology::LoadOBJ("bin/models/cow.obj");
           ptr<primitive> CowPrimitive = CreatePrimitive<small_vertex>(CowMtl, CowTpl.Vertices, 0, CowTpl.Indices);
 
           primitive *CowPrimitives[] {CowPrimitive};
@@ -1303,11 +1316,17 @@ namespace vrt
             .CameraDirection = Scene->Camera.Direction * Scene->Camera.Near,
             .IsMoved = FALSE,
             .CameraRight = Scene->Camera.Right * Scene->Camera.Width,
-            .FrameIndex = 0,
+            .FrameIndex = (UINT32)CurrentFrame,
             .CameraUp = Scene->Camera.Up * Scene->Camera.Height,
           };
           Scene->GlobalBuffer.UnmapMemory();
 
+          present_buffer_data *PresentBufferData = reinterpret_cast<present_buffer_data *>(PresentBuffer.MapMemory());
+          if (DoPresentCollection)
+            PresentBufferData->CollectionFrameCount++;
+          else
+            PresentBufferData->CollectionFrameCount = 1;
+          PresentBuffer.UnmapMemory();
 
           vkBeginCommandBuffer(GraphicsCommandBuffer, &CommandBufferBeginInfo);
 
@@ -1440,6 +1459,7 @@ namespace vrt
 
           // destroy presentation data
           Destroy(TargetImage);
+          Destroy(PresentBuffer);
           vkDestroySampler(Device, TargetImageSampler, nullptr);
           vkDestroyRenderPass(Device, PresentRenderPass, nullptr);
           vkDestroyDescriptorSetLayout(Device, PresentDescriptorSetLayout, nullptr);

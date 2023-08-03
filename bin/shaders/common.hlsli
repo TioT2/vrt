@@ -4,6 +4,7 @@
 #define __common_hlsli_
 
 #include <pbr.hlsli>
+#include <rand.hlsli>
 
 struct hit_info
 {
@@ -69,18 +70,6 @@ float3 Trace( RayDesc Ray, float RecursionDepth = 0 )
 
   if (Payload.DoHit)
   {
-  /*
-    light Lights[3];
-
-    Lights[0].Position = float3(16, 16, 16);
-    Lights[0].Color    = float3(50, 50, 50);
-
-    Lights[1].Position = float3(-16, 16, 16);
-    Lights[1].Color    = float3(100, 50, 0);
-
-    Lights[2].Position = float3(16, 16, -16);
-    Lights[2].Color    = float3(000, 50, 100);
-*/
     float3 Color = 0;
     for (int i = 0; i < GlobalBuffer.LightNumber; i++)
     {
@@ -102,5 +91,47 @@ float3 Trace( RayDesc Ray, float RecursionDepth = 0 )
   }
   return Payload.Material.BaseColor;
 } /* Trace */
+
+#if 0
+float3 CosHemisphereRandom( float3 Normal )
+{
+  // Normal is up
+  float3 Right = float3(1, 0, 0);
+  float3 Dir = normalize(cross(Normal, Right));
+  Right = normalize(cross(Dir, Normal));
+
+  float3 Coord;
+  Coord.xz = float2(Rand(Normal.x, GlobalBuffer.FrameIndex * 30.47), Rand(Normal.y, GlobalBuffer.FrameIndex * 30.47));
+  Coord.y = sqrt(1 - Coord.x * Coord.x - Coord.z * Coord.z);
+
+  return Right * Coord.x + Normal * Coord.y + Dir * Coord.z;
+} /* CosHemisphereRandom */
+
+float3 DirectCos( float3 P, float3 N, float3 ViewDirection, material Material, int RecursionDepth = 0 )
+{
+  float3 WI = CosHemisphereRandom(N);
+  float pdf = dot(WI, N) / PI;
+
+  ray_payload Payload;
+
+  Payload.RecursionDepth = RecursionDepth + 1;
+
+  RayDesc Ray;
+  Ray.Origin = P;
+  Ray.Direction = ViewDirection;
+  Ray.TMin = 0;
+  Ray.TMax = 1024.0;
+
+  TraceRay(Scene, 0, ~0, 0, 1, 0, Ray, Payload);
+
+  if (!Payload.DoHit)
+    return vec3(0.0);
+
+  float3 BRDF = BRDF_CookTorrance(N, ViewDirection, WI, Material);
+  float3 Le = float3(1, 1, 1);//evaluate_emissive(i, WI);
+
+  return BRDF * dot(WI, N) * Le / pdf;
+} /* direct_cos */
+#endif // 0
 
 #endif // !defined __common_hlsli_

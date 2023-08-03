@@ -670,6 +670,7 @@ namespace vrt
         vec3<component> Right     = vec3<component>(1, 0, 0);
         vec3<component> Up        = vec3<component>(0, 1, 0);
         component Near = 1.0f, Width = 1.0f, Height = 1.0f;
+        BOOL Changed = FALSE;
 
         /* Camera setting function */
         VOID Set( const vec3<component> &NewLocation, const vec3<component> &NewDirection, const vec3<component> &NewUp = vec3<component>(0, 1, 0) )

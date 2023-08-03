@@ -14,6 +14,9 @@ namespace vrt
     {
       camera &Camera = System.Render.Scene->Camera;
 
+      if (System.Input.IsKeyClicked(SDL_SCANCODE_SPACE))
+        System.Render.DoPresentCollection = !System.Render.DoPresentCollection;
+
       vec3 MoveAxis
       {
         (FLOAT)(System.Input.IsKeyPressed(SDL_SCANCODE_D) - System.Input.IsKeyPressed(SDL_SCANCODE_A)),

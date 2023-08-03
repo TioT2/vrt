@@ -3,6 +3,15 @@
 
 namespace vrt::render::core
 {
+  VOID kernel::InitializePresentResources( VOID )
+  {
+    InitializeSwapchain();
+    InitializePresentRenderPass();
+    InitializeFramebuffers();
+    InitializeTarget();
+    PresentBuffer = CreateBuffer(sizeof(present_buffer_data), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  } /* InitializePresent */
+
   VOID kernel::InitializeSwapchain( VOID )
   {
     // Get support details
@@ -225,13 +234,20 @@ namespace vrt::render::core
   /* Presentation pipeline initialization function */
   VOID kernel::InitializePresentPipeline( VOID )
   {
-    VkDescriptorSetLayoutBinding DescriptorSetBinding
+    VkDescriptorSetLayoutBinding DescriptorSetBindings[]
     {
-      .binding = 0,
-      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-      .descriptorCount = 1,
-      .stageFlags = VK_SHADER_STAGE_ALL,
-      .pImmutableSamplers = nullptr,
+      {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_ALL,
+      },
+      {
+        .binding = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_ALL,
+      }
     };
 
     VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutCreateInfo
@@ -239,13 +255,17 @@ namespace vrt::render::core
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
       .pNext = nullptr,
       .flags = 0,
-      .bindingCount = 1,
-      .pBindings = &DescriptorSetBinding,
+      .bindingCount = (UINT32)std::size(DescriptorSetBindings),
+      .pBindings = DescriptorSetBindings,
     };
 
     utils::AssertResult(vkCreateDescriptorSetLayout(Device, &DescriptorSetLayoutCreateInfo, nullptr, &PresentDescriptorSetLayout));
 
-    VkDescriptorPoolSize DescriptorPoolSize { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 };
+    VkDescriptorPoolSize DescriptorPoolSizes[]
+    {
+      {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,  1},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
+    };
 
     VkDescriptorPoolCreateInfo DescriptorPoolCreateInfo
     {
@@ -253,8 +273,8 @@ namespace vrt::render::core
       .pNext = nullptr,
       .flags = 0,
       .maxSets = 1,
-      .poolSizeCount = 1,
-      .pPoolSizes = &DescriptorPoolSize,
+      .poolSizeCount = (UINT32)std::size(DescriptorPoolSizes),
+      .pPoolSizes = DescriptorPoolSizes,
     };
 
     utils::AssertResult(vkCreateDescriptorPool(Device, &DescriptorPoolCreateInfo, nullptr, &PresentDescriptorPool));
@@ -276,22 +296,42 @@ namespace vrt::render::core
       .imageView = TargetImage.ImageView,
       .imageLayout = VK_IMAGE_LAYOUT_GENERAL
     };
-
-    VkWriteDescriptorSet DescriptorSetWrite
+    VkDescriptorBufferInfo DescriptorBufferInfo
     {
-      /* VkStructureType               */ .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      /* const void*                   */ .pNext = nullptr,
-      /* VkDescriptorSet               */ .dstSet = PresentDescriptorSet,
-      /* uint32_t                      */ .dstBinding = 0,
-      /* uint32_t                      */ .dstArrayElement = 0,
-      /* uint32_t                      */ .descriptorCount = 1,
-      /* VkDescriptorType              */ .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-      /* const VkDescriptorImageInfo*  */ .pImageInfo = &DescriptorImageInfo,
-      /* const VkDescriptorBufferInfo* */ .pBufferInfo = 0,
-      /* const VkBufferView*           */ .pTexelBufferView = 0,
+      .buffer = PresentBuffer.Buffer,
+      .offset = 0,
+      .range = PresentBuffer.Size,
     };
 
-    vkUpdateDescriptorSets(Device, 1, &DescriptorSetWrite, 0, nullptr);
+    VkWriteDescriptorSet DescriptorSetWrites[]
+    {
+      {
+        /* VkStructureType               */ .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        /* const void*                   */ .pNext = nullptr,
+        /* VkDescriptorSet               */ .dstSet = PresentDescriptorSet,
+        /* uint32_t                      */ .dstBinding = 0,
+        /* uint32_t                      */ .dstArrayElement = 0,
+        /* uint32_t                      */ .descriptorCount = 1,
+        /* VkDescriptorType              */ .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+        /* const VkDescriptorImageInfo*  */ .pImageInfo = &DescriptorImageInfo,
+        /* const VkDescriptorBufferInfo* */ .pBufferInfo = nullptr,
+        /* const VkBufferView*           */ .pTexelBufferView = nullptr,
+      },
+      {
+        /* VkStructureType               */ .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        /* const void*                   */ .pNext = nullptr,
+        /* VkDescriptorSet               */ .dstSet = PresentDescriptorSet,
+        /* uint32_t                      */ .dstBinding = 1,
+        /* uint32_t                      */ .dstArrayElement = 0,
+        /* uint32_t                      */ .descriptorCount = 1,
+        /* VkDescriptorType              */ .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        /* const VkDescriptorImageInfo*  */ .pImageInfo = nullptr,
+        /* const VkDescriptorBufferInfo* */ .pBufferInfo = &DescriptorBufferInfo,
+        /* const VkBufferView*           */ .pTexelBufferView = nullptr,
+      }
+    };
+
+    vkUpdateDescriptorSets(Device, (UINT32)std::size(DescriptorSetWrites), DescriptorSetWrites, 0, nullptr);
 
     VkPipelineLayoutCreateInfo PipelineLayoutCreateInfo
     {
