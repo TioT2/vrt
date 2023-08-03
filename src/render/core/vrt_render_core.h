@@ -137,8 +137,6 @@ namespace vrt
         std::vector<VkPipelineShaderStageCreateInfo> GetPipelineShaderStageCreateInfos( VOID );
       }; /* shader */
 
-
-
       struct material : resource<std::string>
       {
         kernel *Kernel = nullptr;
@@ -147,6 +145,17 @@ namespace vrt
 
         ~material( VOID );
       }; /* material */
+
+
+      /* Point light description structure */
+      struct point_light
+      {
+        vec3 Position;  // Light position
+        FLOAT Aligner0; // Aligner#0
+        vec3 Color;     // Light color
+        FLOAT Aligner1; // Aligner#1
+      }; /* point_light */
+
 
       struct primitive : resource<UINT32>
       {
@@ -183,9 +192,8 @@ namespace vrt
       {
         kernel *Kernel = nullptr;
 
-        std::vector<model *> Models;
-
-        VkAccelerationStructureKHR TLAS = VK_NULL_HANDLE;
+        camera Camera;
+        buffer GlobalBuffer;
 
         VkPipeline Pipeline = VK_NULL_HANDLE;
         VkPipelineLayout PipelineLayout = VK_NULL_HANDLE;
@@ -193,8 +201,13 @@ namespace vrt
         VkDescriptorPool DescriptorPool = VK_NULL_HANDLE;
         VkDescriptorSet DescriptorSet = VK_NULL_HANDLE;
 
+        std::vector<point_light> Lights;
+        buffer LightStorageBuffer;
 
+
+        std::vector<model *> Models;
         buffer TLASStorageBuffer {};
+        VkAccelerationStructureKHR TLAS = VK_NULL_HANDLE;
         buffer InstanceBuffer {};
         SIZE_T InstanceCount = 0;
 
@@ -207,16 +220,163 @@ namespace vrt
       }; /* scene */
 
 
+      struct small_vertex
+      {
+        vec3 Position;
+        vec2 TexCoord;
+        vec3 Normal;
+      }; /* vertex */
+
+      struct topology
+      {
+        std::vector<small_vertex> Vertices;
+        std::vector<UINT32> Indices;
+
+        VOID CalculateNormals( VOID )
+        {
+          for (SIZE_T i = 0, len = Vertices.size(); i < len; i++)
+            Vertices[i].Normal = vec3(0);
+
+          if (Indices.empty())
+          {
+            for (SIZE_T i = 0, len = Vertices.size(); i < len; i += 3)
+            {
+              small_vertex
+                &V0 = Vertices[i + 0],
+                &V1 = Vertices[i + 1],
+                &V2 = Vertices[i + 2];
+
+              vec3 Normal = ((V1.Position - V0.Position) % (V2.Position - V0.Position)).Normalize();
+
+              V0.Normal += Normal;
+              V1.Normal += Normal;
+              V2.Normal += Normal;
+            }
+          }
+          else
+          {
+            for (SIZE_T i = 0, len = Indices.size(); i < len; i += 3)
+            {
+              small_vertex
+                &V0 = Vertices[Indices[i + 0]],
+                &V1 = Vertices[Indices[i + 1]],
+                &V2 = Vertices[Indices[i + 2]];
+
+              vec3 Normal = ((V1.Position - V0.Position) % (V2.Position - V0.Position)).Normalize();
+
+              V0.Normal += Normal;
+              V1.Normal += Normal;
+              V2.Normal += Normal;
+            }
+          }
+
+          for (SIZE_T i = 0, len = Vertices.size(); i < len; i++)
+            Vertices[i].Normal.Normalize();
+        } /* CalculateNormals */
+
+        static topology LoadOBJ( std::string_view Path )
+        {
+          std::FILE * File = std::fopen(Path.data(), "r");
+
+          if (File == nullptr)
+            return {};
+
+          topology Tpl;
+
+          std::vector<vec3> Positions;
+          std::vector<vec2> TexCoords;
+          std::vector<vec3> Normals;
+
+          CHAR Buffer[256];
+
+          /* Optimization */
+          std::map<std::tuple<SIZE_T, SIZE_T, SIZE_T>, SIZE_T> VertexMap;
+
+          while (std::fgets(Buffer, static_cast<INT>(std::size(Buffer)), File))
+          {
+            utils::splitter Splitter {Buffer, ' '};
+            utils::splitter FacetSplitter;
+
+            std::string_view Head = Splitter.Get();
+
+            CHAR *End = nullptr;
+
+            switch (*(WORD *)Head.data())
+            {
+            case "v "_word:
+              Positions.push_back(vec3());
+
+              Positions.back().X = std::strtof(Splitter.Get().data(), &End);
+              Positions.back().Y = std::strtof(Splitter.Get().data(), &End);
+              Positions.back().Z = std::strtof(Splitter.Get().data(), &End);
+              break;
+
+            case "vt"_word:
+              TexCoords.push_back(vec2());
+
+              TexCoords.back().X = std::strtof(Splitter.Get().data(), &End);
+              TexCoords.back().Y = std::strtof(Splitter.Get().data(), &End);
+              break;
+
+            case "vn"_word:
+              Normals.push_back(vec3());
+
+              Normals.back().X = std::strtof(Splitter.Get().data(), &End);
+              Normals.back().Y = std::strtof(Splitter.Get().data(), &End);
+              Normals.back().Z = std::strtof(Splitter.Get().data(), &End);
+              break;
+
+            case "f "_word:
+              for (INT i = 0; i < 3; i++)
+              {
+                FacetSplitter = utils::splitter(Splitter.Get(), '/');
+                SIZE_T PositionIndex = static_cast<SIZE_T>(std::strtol(FacetSplitter.Get().data(), &End, 10));
+                SIZE_T TexCoordIndex = static_cast<SIZE_T>(std::strtol(FacetSplitter.Get().data(), &End, 10));
+                SIZE_T NormalIndex   = static_cast<SIZE_T>(std::strtol(FacetSplitter.Get().data(), &End, 10));
+
+                auto tuple = std::make_tuple(PositionIndex, TexCoordIndex, NormalIndex);
+
+                auto iter = VertexMap.find(tuple);
+
+                // Add vertex if it isn't yet.
+                if (iter == VertexMap.end())
+                {
+                  iter = VertexMap.insert({tuple, Tpl.Vertices.size()}).first;
+
+                  Tpl.Vertices.push_back(small_vertex {});
+                  Tpl.Vertices.back().Position = (PositionIndex == 0 ? vec3(0) : Positions[PositionIndex - 1]);
+                  Tpl.Vertices.back().TexCoord = (TexCoordIndex == 0 ? vec2(0) : TexCoords[TexCoordIndex - 1]);
+                  Tpl.Vertices.back().Normal   = (NormalIndex   == 0 ? vec3(0) : Normals  [NormalIndex   - 1]);
+                }
+
+                Tpl.Indices.push_back(static_cast<UINT32>(iter->second));
+              }
+              break;
+            }
+          }
+
+          std::fclose(File);
+
+          return Tpl;
+        } /* LoadOBJ */
+      }; /* topology */
+
+      struct global_buffer_data
+      {
+        vec3 CameraLocation;  // location of camera
+        UINT32 LightNumber;   // number of pointlight's in scene
+        vec3 CameraDirection; // direction of camera
+        BOOL IsMoved;         // is camera moved on this frame
+        vec3 CameraRight;     // camera right direction
+        UINT32 FrameIndex;    // index of current frame (for random)
+        vec3 CameraUp;        // camera up direction
+      }; /* global_buffer_data */
+
       class kernel : manager<scene, std::string>, manager<material, std::string>, manager<model>, manager<primitive>
       {
-        struct camera_buffer_data
-        {
-          vec4 Location;
-          vec4 DirectionNear;
-          vec4 RightWidth;
-          vec4 UpHeight;
-        }; /* camera_buffer_data */
       public:
+        SIZE_T CurrentFrame = 0;           // Current frame index
+
         SDL_Window *Window = nullptr;      // Window pointer
         BOOL InstanceSetupProcess = FALSE; // flag for validation layers not sh*tting in log by infinite DLL's loading und other 'useful log info'
 
@@ -366,8 +526,6 @@ namespace vrt
         VOID Resize( VOID );
 
         /* ... */
-        camera Camera;
-        buffer CameraUniformBuffer;
 
         image TargetImage;
         VkSampler TargetImageSampler = VK_NULL_HANDLE;
@@ -468,7 +626,7 @@ namespace vrt
               /* VkFormat                      */ .vertexFormat = VK_FORMAT_R32G32B32_SFLOAT,
               /* VkDeviceOrHostAddressConstKHR */ .vertexData = { .deviceAddress = Primitives[i]->VertexBuffer.GetDeviceAddress() + Primitives[i]->VertexPositionComponentOffset },
               /* VkDeviceSize                  */ .vertexStride = Primitives[i]->VertexSize,
-              /* uint32_t                      */ .maxVertex = static_cast<UINT32>(Primitives[i]->VertexCount),
+              /* uint32_t                      */ .maxVertex = (UINT32)Primitives[i]->VertexCount,
               /* VkIndexType                   */ // .indexType = VK_INDEX_TYPE_UINT32,
               /* VkDeviceOrHostAddressConstKHR */ // .indexData = Primitive->IndexCount != 0 ? { .deviceAddress = Primitive->IndexBuffer.GetDeviceAddress() } : {},
               /* VkDeviceOrHostAddressConstKHR */ .transformData {},
@@ -562,6 +720,28 @@ namespace vrt
           Scene->Models = {Models.begin(), Models.end()};
 
           Scene->Kernel = this;
+          Scene->GlobalBuffer = CreateBuffer(sizeof(global_buffer_data), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+
+          // Add first light
+          Scene->Lights =
+          {
+            {
+              .Position = vec3(16, 16, 16),
+              .Color    = vec3(50, 50, 50),
+            },
+            {
+              .Position = vec3(-16, 16, 16),
+              .Color    = vec3(100, 50, 0),
+            },
+            {
+              .Position = vec3(16, 16, -16),
+              .Color    = vec3(000, 50, 100),
+            }
+          };
+          Scene->LightStorageBuffer = CreateBuffer(sizeof(point_light) * Scene->Lights.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+          Scene->LightStorageBuffer.WriteData(Scene->Lights.data(), sizeof(point_light) * Scene->Lights.size());
+
 
           Scene->InstanceCount = Models.size();
 
@@ -575,7 +755,7 @@ namespace vrt
 
           VkAccelerationStructureInstanceKHR *InstanceData = reinterpret_cast<VkAccelerationStructureInstanceKHR *>(Scene->InstanceBuffer.MapMemory());
 
-          UINT32 Offset = 0;
+          SIZE_T Offset = 0;
           for (SIZE_T i = 0; i < Scene->InstanceCount; i++)
           {
             VkAccelerationStructureDeviceAddressInfoKHR DeviceAddressInfo
@@ -592,7 +772,7 @@ namespace vrt
               .transform = Models[i]->TransformMatrix,
               .instanceCustomIndex = 0,
               .mask = 0xFF,
-              .instanceShaderBindingTableRecordOffset = Offset,
+              .instanceShaderBindingTableRecordOffset = (UINT32)Offset,
               .flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR,
               .accelerationStructureReference = BLASAddres,
             };
@@ -680,21 +860,24 @@ namespace vrt
               .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
               .descriptorCount = 1,
               .stageFlags = VK_SHADER_STAGE_ALL,
-              .pImmutableSamplers = nullptr,
             },
             {
               .binding = 1,
               .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
               .descriptorCount = 1,
               .stageFlags = VK_SHADER_STAGE_ALL,
-              .pImmutableSamplers = nullptr,
             },
             {
               .binding = 2,
               .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
               .descriptorCount = 1,
               .stageFlags = VK_SHADER_STAGE_ALL,
-              .pImmutableSamplers = nullptr,
+            },
+            {
+              .binding = 3,
+              .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+              .descriptorCount = 1,
+              .stageFlags = VK_SHADER_STAGE_ALL,
             }
           };
 
@@ -703,7 +886,7 @@ namespace vrt
             /* VkStructureType                     */ .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
             /* const void*                         */ .pNext = nullptr,
             /* VkDescriptorSetLayoutCreateFlags    */ .flags = 0,
-            /* uint32_t                            */ .bindingCount = static_cast<UINT32>(std::size(DescriptorSetLayoutBindings)),
+            /* uint32_t                            */ .bindingCount = (UINT32)std::size(DescriptorSetLayoutBindings),
             /* const VkDescriptorSetLayoutBinding* */ .pBindings = DescriptorSetLayoutBindings,
           };
 
@@ -714,6 +897,7 @@ namespace vrt
             { .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,              .descriptorCount = 1, },
             { .type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, .descriptorCount = 1, },
             { .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,             .descriptorCount = 1, },
+            { .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,             .descriptorCount = 1, },
           };
 
           VkDescriptorPoolCreateInfo DescriptorPoolCreateInfo
@@ -722,7 +906,7 @@ namespace vrt
             /* const void*                 */ .pNext = nullptr,
             /* VkDescriptorPoolCreateFlags */ .flags = 0,
             /* uint32_t                    */ .maxSets = 1,
-            /* uint32_t                    */ .poolSizeCount = static_cast<UINT32>(std::size(PoolSizes)),
+            /* uint32_t                    */ .poolSizeCount = (UINT32)std::size(PoolSizes),
             /* const VkDescriptorPoolSize* */ .pPoolSizes = PoolSizes,
           };
 
@@ -752,11 +936,17 @@ namespace vrt
             .imageView = TargetImage.ImageView,
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
           };
-          VkDescriptorBufferInfo CameraBufferInfo
+          VkDescriptorBufferInfo GlobalBufferInfo
           {
-            .buffer = CameraUniformBuffer.Buffer,
+            .buffer = Scene->GlobalBuffer.Buffer,
             .offset = 0,
-            .range = CameraUniformBuffer.Size,
+            .range = Scene->GlobalBuffer.Size,
+          };
+          VkDescriptorBufferInfo LightStorageBufferInfo
+          {
+            .buffer = Scene->LightStorageBuffer.Buffer,
+            .offset = 0,
+            .range = Scene->LightStorageBuffer.Size,
           };
 
           VkWriteDescriptorSet DescriptorSetWrites[]
@@ -783,11 +973,12 @@ namespace vrt
               /* uint32_t                      */ .dstArrayElement = 0,
               /* uint32_t                      */ .descriptorCount = 1,
               /* VkDescriptorType              */ .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-              /* const VkDescriptorImageInfo*  */ .pImageInfo = 0,
+              /* const VkDescriptorImageInfo*  */ .pImageInfo = nullptr,
               /* const VkDescriptorBufferInfo* */ .pBufferInfo = 0,
-              /* const VkBufferView*           */ .pTexelBufferView = 0,
+              /* const VkBufferView*           */ .pTexelBufferView = nullptr,
             },
-            /* Camera binding */
+
+            /* global uniform buffer */
             {
               /* VkStructureType               */ .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
               /* const void*                   */ .pNext = nullptr,
@@ -796,13 +987,26 @@ namespace vrt
               /* uint32_t                      */ .dstArrayElement = 0,
               /* uint32_t                      */ .descriptorCount = 1,
               /* VkDescriptorType              */ .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-              /* const VkDescriptorImageInfo*  */ .pImageInfo = 0,
-              /* const VkDescriptorBufferInfo* */ .pBufferInfo = &CameraBufferInfo,
-              /* const VkBufferView*           */ .pTexelBufferView = 0,
+              /* const VkDescriptorImageInfo*  */ .pImageInfo = nullptr,
+              /* const VkDescriptorBufferInfo* */ .pBufferInfo = &GlobalBufferInfo,
+              /* const VkBufferView*           */ .pTexelBufferView = nullptr,
+            },
+            /* light storage buffer */
+            {
+              /* VkStructureType               */ .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+              /* const void*                   */ .pNext = nullptr,
+              /* VkDescriptorSet               */ .dstSet = Scene->DescriptorSet,
+              /* uint32_t                      */ .dstBinding = 3,
+              /* uint32_t                      */ .dstArrayElement = 0,
+              /* uint32_t                      */ .descriptorCount = 1,
+              /* VkDescriptorType              */ .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+              /* const VkDescriptorImageInfo*  */ .pImageInfo = nullptr,
+              /* const VkDescriptorBufferInfo* */ .pBufferInfo = &LightStorageBufferInfo,
+              /* const VkBufferView*           */ .pTexelBufferView = nullptr,
             }
           };
 
-          vkUpdateDescriptorSets(Device, static_cast<UINT32>(std::size(DescriptorSetWrites)), DescriptorSetWrites, 0, nullptr);
+          vkUpdateDescriptorSets(Device, (UINT32)std::size(DescriptorSetWrites), DescriptorSetWrites, 0, nullptr);
 
           module_compilation_info Shader {L"", L"", L"lib"};
           shader_compiler Compiler;
@@ -961,7 +1165,7 @@ namespace vrt
 
             PrimitiveInfo->VertexBufferPtr = Primitives[p]->VertexBuffer.GetDeviceAddress();
             PrimitiveInfo->IndexBufferPtr = Primitives[p]->IndexCount == 0 ? 0 : Primitives[p]->IndexBuffer.GetDeviceAddress();
-            PrimitiveInfo->VertexSize = Primitives[p]->VertexSize;
+            PrimitiveInfo->VertexSize = static_cast<UINT32>(Primitives[p]->VertexSize);
           }
 
           SBTStagingBuffer.UnmapMemory();
@@ -990,218 +1194,6 @@ namespace vrt
           return Result == VK_SUCCESS ? ShaderModule : VK_NULL_HANDLE;
         } /* CreateInfo */
 
-        struct small_vertex
-        {
-          vec3 Position;
-          vec2 TexCoord;
-          vec3 Normal;
-        }; /* vertex */
-
-        struct topology
-        {
-          std::vector<small_vertex> Vertices;
-          std::vector<UINT32> Indices;
-
-          VOID CalculateNormals( VOID )
-          {
-            for (UINT32 i = 0, len = Vertices.size(); i < len; i++)
-              Vertices[i].Normal = vec3(0);
-
-            if (Indices.empty())
-            {
-              for (UINT32 i = 0, len = Vertices.size(); i < len; i += 3)
-              {
-                small_vertex
-                  &V0 = Vertices[i + 0],
-                  &V1 = Vertices[i + 1],
-                  &V2 = Vertices[i + 2];
-
-                vec3 Normal = ((V1.Position - V0.Position) % (V2.Position - V0.Position)).Normalize();
-
-                V0.Normal += Normal;
-                V1.Normal += Normal;
-                V2.Normal += Normal;
-              }
-            }
-            else
-            {
-              for (UINT32 i = 0, len = Indices.size(); i < len; i += 3)
-              {
-                small_vertex
-                  &V0 = Vertices[Indices[i + 0]],
-                  &V1 = Vertices[Indices[i + 1]],
-                  &V2 = Vertices[Indices[i + 2]];
-
-                vec3 Normal = ((V1.Position - V0.Position) % (V2.Position - V0.Position)).Normalize();
-
-                V0.Normal += Normal;
-                V1.Normal += Normal;
-                V2.Normal += Normal;
-              }
-            }
-
-            for (UINT32 i = 0, len = Vertices.size(); i < len; i++)
-              Vertices[i].Normal.Normalize();
-          } /* CalculateNormals */
-
-          static topology LoadOBJ( std::string_view Path )
-          {
-            std::FILE * File = std::fopen(Path.data(), "r");
-
-            if (File == nullptr)
-              return {};
-
-            topology Tpl;
-
-            std::vector<vec3> Positions;
-            std::vector<vec2> TexCoords;
-            std::vector<vec3> Normals;
-
-            CHAR Buffer[256];
-
-            /* Optimization */
-            std::map<std::tuple<SIZE_T, SIZE_T, SIZE_T>, SIZE_T> VertexMap;
-
-            while (std::fgets(Buffer, static_cast<INT>(std::size(Buffer)), File))
-            {
-              utils::splitter Splitter {Buffer, ' '};
-              utils::splitter FacetSplitter;
-
-              std::string_view Head = Splitter.Get();
-
-              CHAR *End = nullptr;
-
-              switch (*(WORD *)Head.data())
-              {
-              case "v "_word:
-                Positions.push_back(vec3());
-
-                Positions.back().X = std::strtof(Splitter.Get().data(), &End);
-                Positions.back().Y = std::strtof(Splitter.Get().data(), &End);
-                Positions.back().Z = std::strtof(Splitter.Get().data(), &End);
-                break;
-
-              case "vt"_word:
-                TexCoords.push_back(vec2());
-
-                TexCoords.back().X = std::strtof(Splitter.Get().data(), &End);
-                TexCoords.back().Y = std::strtof(Splitter.Get().data(), &End);
-                break;
-
-              case "vn"_word:
-                Normals.push_back(vec3());
-
-                Normals.back().X = std::strtof(Splitter.Get().data(), &End);
-                Normals.back().Y = std::strtof(Splitter.Get().data(), &End);
-                Normals.back().Z = std::strtof(Splitter.Get().data(), &End);
-                break;
-
-              case "f "_word:
-                for (INT i = 0; i < 3; i++)
-                {
-                  FacetSplitter = utils::splitter(Splitter.Get(), '/');
-                  SIZE_T PositionIndex = static_cast<SIZE_T>(std::strtol(FacetSplitter.Get().data(), &End, 10));
-                  SIZE_T TexCoordIndex = static_cast<SIZE_T>(std::strtol(FacetSplitter.Get().data(), &End, 10));
-                  SIZE_T NormalIndex   = static_cast<SIZE_T>(std::strtol(FacetSplitter.Get().data(), &End, 10));
-
-                  auto tuple = std::make_tuple(PositionIndex, TexCoordIndex, NormalIndex);
-
-                  auto iter = VertexMap.find(tuple);
-
-                  // Add vertex if it isn't yet.
-                  if (iter == VertexMap.end())
-                  {
-                    iter = VertexMap.insert({tuple, Tpl.Vertices.size()}).first;
-
-                    Tpl.Vertices.push_back(small_vertex {});
-                    Tpl.Vertices.back().Position = (PositionIndex == 0 ? vec3() : Positions[PositionIndex - 1]);
-                    Tpl.Vertices.back().TexCoord = (TexCoordIndex == 0 ? vec2() : TexCoords[TexCoordIndex - 1]);
-                    Tpl.Vertices.back().Normal   = (NormalIndex   == 0 ? vec3() : Normals  [NormalIndex   - 1]);
-                  }
-
-                  Tpl.Indices.push_back(iter->second);
-                }
-                break;
-              }
-            }
-
-            std::fclose(File);
-
-            return Tpl;
-          } /* LoadOBJ */
-        }; /* topology */
-
-        static std::vector<small_vertex> LoadOBJ( std::string_view Path )
-        {
-          std::FILE * File = std::fopen(Path.data(), "r");
-
-          if (File == nullptr)
-            return {};
-
-          std::vector<small_vertex> Vertices;
-
-          std::vector<vec3> Positions;
-          std::vector<vec2> TexCoords;
-          std::vector<vec3> Normals;
-
-          CHAR Buffer[256];
-
-          while (std::fgets(Buffer, static_cast<INT>(std::size(Buffer)), File))
-          {
-            utils::splitter Splitter {Buffer, ' '};
-            utils::splitter FacetSplitter;
-
-            std::string_view Head = Splitter.Get();
-
-            CHAR *End = nullptr;
-
-            switch (*(WORD *)Head.data())
-            {
-            case "v "_word:
-              Positions.push_back(vec3());
-
-              Positions.back().X = std::strtof(Splitter.Get().data(), &End);
-              Positions.back().Y = std::strtof(Splitter.Get().data(), &End);
-              Positions.back().Z = std::strtof(Splitter.Get().data(), &End);
-              break;
-
-            case "vt"_word:
-              TexCoords.push_back(vec2());
-
-              TexCoords.back().X = std::strtof(Splitter.Get().data(), &End);
-              TexCoords.back().Y = std::strtof(Splitter.Get().data(), &End);
-              break;
-
-            case "vn"_word:
-              Normals.push_back(vec3());
-
-              Normals.back().X = std::strtof(Splitter.Get().data(), &End);
-              Normals.back().Y = std::strtof(Splitter.Get().data(), &End);
-              Normals.back().Z = std::strtof(Splitter.Get().data(), &End);
-              break;
-
-            case "f "_word:
-              for (INT i = 0; i < 3; i++)
-              {
-                Vertices.push_back(small_vertex {});
-
-                FacetSplitter = utils::splitter(Splitter.Get(), '/');
-                SIZE_T PositionIndex = static_cast<SIZE_T>(std::strtol(FacetSplitter.Get().data(), &End, 10));
-                SIZE_T TexCoordIndex = static_cast<SIZE_T>(std::strtol(FacetSplitter.Get().data(), &End, 10));
-                SIZE_T NormalIndex   = static_cast<SIZE_T>(std::strtol(FacetSplitter.Get().data(), &End, 10));
-
-                Vertices.back().Position = (PositionIndex == 0 ? vec3() : Positions[PositionIndex - 1]);
-                Vertices.back().TexCoord = (TexCoordIndex == 0 ? vec2() : TexCoords[TexCoordIndex - 1]);
-                Vertices.back().Normal   = (NormalIndex   == 0 ? vec3() : Normals  [NormalIndex   - 1]);
-              }
-              break;
-            }
-          }
-
-          std::fclose(File);
-
-          return Vertices;
-        } /* LoadOBJ */
 
         VOID Initialize( SDL_Window *RenderWindow )
         {
@@ -1216,9 +1208,6 @@ namespace vrt
 
           InitializePresentResources();
           InitializePresentPipeline();
-
-          // First-triangle functions
-          CameraUniformBuffer = CreateBuffer(sizeof(camera_buffer_data), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
           topology CowTpl = topology::LoadOBJ("bin/models/cow.obj");
 
@@ -1239,7 +1228,7 @@ namespace vrt
           vec3 TriangleVtx[3];
           for (INT i = 0; i < 3; i++)
           {
-            FLOAT Angle = mth::PI * (i * 0.666 + 0.5);
+            FLOAT Angle = static_cast<FLOAT>(mth::PI) * (i * 0.666f + 0.5f);
 
             TriangleVtx[i] = vec3(std::cos(Angle), std::sin(Angle), 0) + vec3(0, 2, 0);
           }
@@ -1253,8 +1242,6 @@ namespace vrt
 
           primitive *CowPrimitives[] {CowPrimitive};
           ptr<model> CowModel = CreateModel(CowPrimitives);
-
-          // CowModel->TransformMatrix = mat4::Scale(vec3(0.3, 0.1, 0.3));
 
           model *Models[] {WorldModel, CowModel};
           Scene = CreateScene("Default", Models);
@@ -1308,15 +1295,18 @@ namespace vrt
             .pInheritanceInfo = nullptr,
           };
 
-          camera_buffer_data *BufferData = reinterpret_cast<camera_buffer_data *>(CameraUniformBuffer.MapMemory());
-          *BufferData = camera_buffer_data
+          global_buffer_data *BufferData = reinterpret_cast<global_buffer_data *>(Scene->GlobalBuffer.MapMemory());
+          *BufferData = global_buffer_data
           {
-            .Location = vec4(Camera.Location, 1.0f),
-            .DirectionNear = vec4(Camera.Direction * Camera.Near, Camera.Near),
-            .RightWidth = vec4(Camera.Right * Camera.Width, Camera.Width),
-            .UpHeight = vec4(Camera.Up * Camera.Height, Camera.Height),
+            .CameraLocation = Scene->Camera.Location,
+            .LightNumber = (UINT32)Scene->Lights.size(),
+            .CameraDirection = Scene->Camera.Direction * Scene->Camera.Near,
+            .IsMoved = FALSE,
+            .CameraRight = Scene->Camera.Right * Scene->Camera.Width,
+            .FrameIndex = 0,
+            .CameraUp = Scene->Camera.Up * Scene->Camera.Height,
           };
-          CameraUniformBuffer.UnmapMemory();
+          Scene->GlobalBuffer.UnmapMemory();
 
 
           vkBeginCommandBuffer(GraphicsCommandBuffer, &CommandBufferBeginInfo);
@@ -1403,7 +1393,7 @@ namespace vrt
           {
             .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
             .pNext = nullptr,
-            .waitSemaphoreCount = static_cast<UINT32>(std::size(waitSemaphores)),
+            .waitSemaphoreCount = (UINT32)std::size(waitSemaphores),
             .pWaitSemaphores = waitSemaphores,
             .pWaitDstStageMask = Flags,
             .commandBufferCount = 1,
@@ -1428,6 +1418,8 @@ namespace vrt
           };
 
           vkQueuePresentKHR(PresentQueue, &presentInfo);
+
+          CurrentFrame++;
         } /* Render */
 
         VOID FlushFree( VOID )
@@ -1447,7 +1439,6 @@ namespace vrt
           FlushFree();
 
           // destroy presentation data
-          Destroy(CameraUniformBuffer);
           Destroy(TargetImage);
           vkDestroySampler(Device, TargetImageSampler, nullptr);
           vkDestroyRenderPass(Device, PresentRenderPass, nullptr);

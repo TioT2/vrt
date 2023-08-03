@@ -5,6 +5,13 @@
 
 #include <math_consts.hlsli>
 
+struct material
+{
+  float3 BaseColor;
+  float Metallicness;
+  float Roughness;
+}; /* material */
+
 float3 GetF0( float3 BaseColor, float Metallicness )
 {
   return float3(0.04, 0.04, 0.04) * (1 - Metallicness) + BaseColor * Metallicness;
@@ -53,18 +60,32 @@ float3 BRDF_CookTorrance( float3 N, float3 V, float3 L, float3 BaseColor, float 
   return Specular + Diffuse;
 } /* BRDF_CookTorrance */
 
-float3 PBR_Shade( float3 Position, float3 Normal, float3 CameraPosition, float3 LightPosition, float3 LightColor, float3 BaseColor, float Metallicness, float Roughness )
+float3 PBR_Shade( float3 Position, float3 Normal, float3 CameraPosition, float3 LightPosition, float3 LightColor, material Material )
 {
   float3 ViewDirection = normalize(CameraPosition - Position);
   float3 LightDirection = normalize(LightPosition - Position);
   float3 ViewNormal = faceforward(Normal, -ViewDirection, Normal);
 
-  float3 BRDF = BRDF_CookTorrance(ViewNormal, ViewDirection, LightDirection, BaseColor, Metallicness, Roughness);
+  float3 BRDF = BRDF_CookTorrance(ViewNormal, ViewDirection, LightDirection, Material.BaseColor, Material.Metallicness, Material.Roughness);
   float3 Light = LightColor / distance(Position, LightPosition);
   float3 NL = dot(ViewNormal, LightDirection);
 
   return BRDF * Light * saturate(NL);
 } /* PBR_Shade */
+
+/*float3 DirectCos( float3 P, float3 n, float3 wo, Material m )
+{
+  float3 wi = RandomCosineHemisphere(n);
+  float pdf = dot(wi, n) / PI;
+
+  float3 i = Trace(P, wi);
+  if (!i.hit) return vec3(0.0);
+
+  float3 BRDF = evaluate_material(m, n, wo, wi);
+  float3 Le = evaluate_emissive(i, wi);
+
+  return BRDF * dot(wi, n) * Le / pdf;
+} direct_cos */
 
 
 #endif /* !defined __pbr_hlsli_ */

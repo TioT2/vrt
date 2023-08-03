@@ -150,11 +150,11 @@ namespace vrt
     struct { INT Width, Height; } OldWindowSize = {30, 30};
 
   public:
-    std::span<const CHAR *> ConsoleArguments;
+    std::span<const CHAR *> ConsoleArguments {};
     BOOL IsFullscreen = FALSE;
-    utils::timer Timer;
-    utils::input Input;
-    render::engine Render;
+    utils::timer Timer {};
+    utils::input Input {};
+    render::engine Render {};
 
     VOID SwitchFullscreen( VOID )
     {

@@ -5,7 +5,7 @@
 
 float3 RayDirectionFromScreenCoord( float2 ScreenCoord )
 {
-  return normalize(Camera.DirectionNear.xyz + Camera.RightWidth.xyz * ScreenCoord.x + Camera.UpHeight.xyz * ScreenCoord.y);
+  return normalize(GlobalBuffer.CameraDirection + GlobalBuffer.CameraRight * ScreenCoord.x + GlobalBuffer.CameraUp * ScreenCoord.y);
 } /* RayDirectionFromTexCoord */
 
 [shader("raygeneration")]
@@ -19,7 +19,7 @@ void rrs_main( void )
   FragCoord = FragCoord * 2.0 - 1.0;
 
   RayDesc Ray;
-  Ray.Origin = Camera.Location.xyz;
+  Ray.Origin = GlobalBuffer.CameraLocation.xyz;
   Ray.Direction = RayDirectionFromScreenCoord(FragCoord);
 
   Ray.TMin = 0;
@@ -42,6 +42,6 @@ void rrs_main( void )
 [shader("miss")]
 void rms_main( inout ray_payload Payload )
 {
-  Payload.BaseColor = 0;
+  Payload.Material.BaseColor = 0;
   Payload.DoHit = false;
 } /* rms_main */

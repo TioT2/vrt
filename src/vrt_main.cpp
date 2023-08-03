@@ -12,6 +12,8 @@ namespace vrt
 
     VOID Response( system &System ) override
     {
+      camera &Camera = System.Render.Scene->Camera;
+
       vec3 MoveAxis
       {
         (FLOAT)(System.Input.IsKeyPressed(SDL_SCANCODE_D) - System.Input.IsKeyPressed(SDL_SCANCODE_A)),
@@ -25,18 +27,18 @@ namespace vrt
       };
 
       vec3 MovementDelta = (
-          System.Render.Camera.Right     * MoveAxis.X +
-          System.Render.Camera.Up        * MoveAxis.Y +
-          System.Render.Camera.Direction * MoveAxis.Z
+          Camera.Right     * MoveAxis.X +
+          Camera.Up        * MoveAxis.Y +
+          Camera.Direction * MoveAxis.Z
         ) * System.Timer.GetDeltaTime() * 3.0;
 
-      FLOAT Azimuth = std::acos(System.Render.Camera.Direction.Y);
+      FLOAT Azimuth = std::acos(Camera.Direction.Y);
       FLOAT Elevator =
-        System.Render.Camera.Direction.Z / std::abs(System.Render.Camera.Direction.Z) *
+        Camera.Direction.Z / std::abs(Camera.Direction.Z) *
         std::acos(
-          System.Render.Camera.Direction.X /
+          Camera.Direction.X /
           std::sqrt(
-            System.Render.Camera.Direction.X * System.Render.Camera.Direction.X + System.Render.Camera.Direction.Z * System.Render.Camera.Direction.Z
+            Camera.Direction.X * Camera.Direction.X + Camera.Direction.Z * Camera.Direction.Z
           )
         );
 
@@ -52,7 +54,7 @@ namespace vrt
         std::sin(Azimuth) * std::sin(Elevator)
       };
       
-      System.Render.Camera.Set(System.Render.Camera.Location + MovementDelta, NewDirection);
+      Camera.Set(Camera.Location + MovementDelta, NewDirection);
     } /* Response */
   }; /* camera_controller */
 

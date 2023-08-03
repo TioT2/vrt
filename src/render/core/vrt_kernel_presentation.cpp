@@ -425,7 +425,7 @@ namespace vrt::render::core
       /* const VkDynamicState*             */ .pDynamicStates = DynamicStates,
     };
 
-    shader Shader = LoadShader("bin/shaders/shade");
+    shader Shader = LoadShader("bin/shaders/present");
     std::vector<VkPipelineShaderStageCreateInfo> ShaderStageCreateInfos = Shader.GetPipelineShaderStageCreateInfos();
 
     VkGraphicsPipelineCreateInfo GraphicsPipelineCreateInfo
@@ -501,10 +501,10 @@ namespace vrt::render::core
     RewriteTargetImage.dstSet = PresentDescriptorSet;
     vkUpdateDescriptorSets(Device, 1, &RewriteTargetImage, 0, nullptr);
 
-    // Rewrite descriptor sets
+
+    // Rewrite scene descriptor sets
     RewriteTargetImage.dstSet = Scene->DescriptorSet;
     vkUpdateDescriptorSets(Device, 1, &RewriteTargetImage, 0, nullptr);
-
-    Camera.SetAspect((FLOAT)SwapchainImageExtent.width, (FLOAT)SwapchainImageExtent.height);
+    Scene->Camera.SetAspect((FLOAT)SwapchainImageExtent.width, (FLOAT)SwapchainImageExtent.height);
   } /* Resize */
 } /* namespace rtt::render */

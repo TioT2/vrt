@@ -188,7 +188,7 @@ namespace vrt::render::core
 
           IDxcResult *ModuleCompilationResult = nullptr;
 
-          HRes = Compiler->Compile(&SourceBuffer, CompilationArguments, std::size(CompilationArguments), &IncludeHandler, IID_PPV_ARGS(&ModuleCompilationResult));
+          HRes = Compiler->Compile(&SourceBuffer, CompilationArguments, (UINT32)std::size(CompilationArguments), &IncludeHandler, IID_PPV_ARGS(&ModuleCompilationResult));
 
           if (SUCCEEDED(HRes))
             ModuleCompilationResult->GetStatus(&HRes);

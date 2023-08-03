@@ -29,12 +29,15 @@ namespace vrt::render::core
     for (model *Model : Models)
       Model->Release();
 
+
     vkDestroyAccelerationStructureKHR(Kernel->Device, TLAS, nullptr);
     vkDestroyDescriptorPool(Kernel->Device, DescriptorPool, nullptr);
     vkDestroyPipeline(Kernel->Device, Pipeline, nullptr);
     vkDestroyPipelineLayout(Kernel->Device, PipelineLayout, nullptr);
     vkDestroyDescriptorSetLayout(Kernel->Device, DescriptorSetLayout, nullptr);
 
+    Kernel->Destroy(LightStorageBuffer);
+    Kernel->Destroy(GlobalBuffer);
     Kernel->Destroy(InstanceBuffer);
     Kernel->Destroy(TLASStorageBuffer);
     Kernel->Destroy(SBTStorageBuffer);
