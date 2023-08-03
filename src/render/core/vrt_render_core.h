@@ -432,6 +432,7 @@ namespace vrt
 
         /* @brief Model creating function.
          * @param[in] std::span<primitive *> Primitives - array of that this model include
+         * @param[in] mat4 TransformMatrix - Model transformation matrix
          */
         model * CreateModel( std::span<primitive *> Primitives, mat4 TransformMatrix = mat4::Identity() )
         {
@@ -906,7 +907,7 @@ namespace vrt
             /* const VkPipelineShaderStageCreateInfo*            */ .pStages = ShaderStageCreateInfos.data(),
             /* uint32_t                                          */ .groupCount = static_cast<UINT32>(ShaderGroupCreateInfos.size()),
             /* const VkRayTracingShaderGroupCreateInfoKHR*       */ .pGroups = ShaderGroupCreateInfos.data(),
-            /* uint32_t                                          */ .maxPipelineRayRecursionDepth = 8,
+            /* uint32_t                                          */ .maxPipelineRayRecursionDepth = 12,
             /* const VkPipelineLibraryCreateInfoKHR*             */ .pLibraryInfo = nullptr,
             /* const VkRayTracingPipelineInterfaceCreateInfoKHR* */ .pLibraryInterface = nullptr,
             /* const VkPipelineDynamicStateCreateInfo*           */ .pDynamicState = nullptr,
@@ -995,6 +996,140 @@ namespace vrt
           vec2 TexCoord;
           vec3 Normal;
         }; /* vertex */
+
+        struct topology
+        {
+          std::vector<small_vertex> Vertices;
+          std::vector<UINT32> Indices;
+
+          VOID CalculateNormals( VOID )
+          {
+            for (UINT32 i = 0, len = Vertices.size(); i < len; i++)
+              Vertices[i].Normal = vec3(0);
+
+            if (Indices.empty())
+            {
+              for (UINT32 i = 0, len = Vertices.size(); i < len; i += 3)
+              {
+                small_vertex
+                  &V0 = Vertices[i + 0],
+                  &V1 = Vertices[i + 1],
+                  &V2 = Vertices[i + 2];
+
+                vec3 Normal = ((V1.Position - V0.Position) % (V2.Position - V0.Position)).Normalize();
+
+                V0.Normal += Normal;
+                V1.Normal += Normal;
+                V2.Normal += Normal;
+              }
+            }
+            else
+            {
+              for (UINT32 i = 0, len = Indices.size(); i < len; i += 3)
+              {
+                small_vertex
+                  &V0 = Vertices[Indices[i + 0]],
+                  &V1 = Vertices[Indices[i + 1]],
+                  &V2 = Vertices[Indices[i + 2]];
+
+                vec3 Normal = ((V1.Position - V0.Position) % (V2.Position - V0.Position)).Normalize();
+
+                V0.Normal += Normal;
+                V1.Normal += Normal;
+                V2.Normal += Normal;
+              }
+            }
+
+            for (UINT32 i = 0, len = Vertices.size(); i < len; i++)
+              Vertices[i].Normal.Normalize();
+          } /* CalculateNormals */
+
+          static topology LoadOBJ( std::string_view Path )
+          {
+            std::FILE * File = std::fopen(Path.data(), "r");
+
+            if (File == nullptr)
+              return {};
+
+            topology Tpl;
+
+            std::vector<vec3> Positions;
+            std::vector<vec2> TexCoords;
+            std::vector<vec3> Normals;
+
+            CHAR Buffer[256];
+
+            /* Optimization */
+            std::map<std::tuple<SIZE_T, SIZE_T, SIZE_T>, SIZE_T> VertexMap;
+
+            while (std::fgets(Buffer, static_cast<INT>(std::size(Buffer)), File))
+            {
+              utils::splitter Splitter {Buffer, ' '};
+              utils::splitter FacetSplitter;
+
+              std::string_view Head = Splitter.Get();
+
+              CHAR *End = nullptr;
+
+              switch (*(WORD *)Head.data())
+              {
+              case "v "_word:
+                Positions.push_back(vec3());
+
+                Positions.back().X = std::strtof(Splitter.Get().data(), &End);
+                Positions.back().Y = std::strtof(Splitter.Get().data(), &End);
+                Positions.back().Z = std::strtof(Splitter.Get().data(), &End);
+                break;
+
+              case "vt"_word:
+                TexCoords.push_back(vec2());
+
+                TexCoords.back().X = std::strtof(Splitter.Get().data(), &End);
+                TexCoords.back().Y = std::strtof(Splitter.Get().data(), &End);
+                break;
+
+              case "vn"_word:
+                Normals.push_back(vec3());
+
+                Normals.back().X = std::strtof(Splitter.Get().data(), &End);
+                Normals.back().Y = std::strtof(Splitter.Get().data(), &End);
+                Normals.back().Z = std::strtof(Splitter.Get().data(), &End);
+                break;
+
+              case "f "_word:
+                for (INT i = 0; i < 3; i++)
+                {
+                  FacetSplitter = utils::splitter(Splitter.Get(), '/');
+                  SIZE_T PositionIndex = static_cast<SIZE_T>(std::strtol(FacetSplitter.Get().data(), &End, 10));
+                  SIZE_T TexCoordIndex = static_cast<SIZE_T>(std::strtol(FacetSplitter.Get().data(), &End, 10));
+                  SIZE_T NormalIndex   = static_cast<SIZE_T>(std::strtol(FacetSplitter.Get().data(), &End, 10));
+
+                  auto tuple = std::make_tuple(PositionIndex, TexCoordIndex, NormalIndex);
+
+                  auto iter = VertexMap.find(tuple);
+
+                  // Add vertex if it isn't yet.
+                  if (iter == VertexMap.end())
+                  {
+                    iter = VertexMap.insert({tuple, Tpl.Vertices.size()}).first;
+
+                    Tpl.Vertices.push_back(small_vertex {});
+                    Tpl.Vertices.back().Position = (PositionIndex == 0 ? vec3() : Positions[PositionIndex - 1]);
+                    Tpl.Vertices.back().TexCoord = (TexCoordIndex == 0 ? vec2() : TexCoords[TexCoordIndex - 1]);
+                    Tpl.Vertices.back().Normal   = (NormalIndex   == 0 ? vec3() : Normals  [NormalIndex   - 1]);
+                  }
+
+                  Tpl.Indices.push_back(iter->second);
+                }
+                break;
+              }
+            }
+
+            std::fclose(File);
+
+            return Tpl;
+          } /* LoadOBJ */
+        }; /* topology */
 
         static std::vector<small_vertex> LoadOBJ( std::string_view Path )
         {
@@ -1085,7 +1220,7 @@ namespace vrt
           // First-triangle functions
           CameraUniformBuffer = CreateBuffer(sizeof(camera_buffer_data), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-          std::vector<small_vertex> Vtx = LoadOBJ("bin/models/cow.obj");
+          topology CowTpl = topology::LoadOBJ("bin/models/cow.obj");
 
           ptr<material> PlaneMtl = CreateMaterial("Plane", "bin/shaders/plane");
           ptr<material> TriangleMtl = CreateMaterial("Triangle", "bin/shaders/triangle");
@@ -1114,8 +1249,8 @@ namespace vrt
           ptr<model> WorldModel = CreateModel(WorldPrimitives);
 
 
-          ptr<primitive> CowPrimitive = CreatePrimitive<small_vertex>(CowMtl, Vtx, 0, {}, mat4::Scale(vec3(0.1f)));
-          CowPrimitive->TrasnformMatrix = mat4::Scale(vec3(0.3, 0.1, 0.3));
+          ptr<primitive> CowPrimitive = CreatePrimitive<small_vertex>(CowMtl, CowTpl.Vertices, 0, CowTpl.Indices);
+
           primitive *CowPrimitives[] {CowPrimitive};
           ptr<model> CowModel = CreateModel(CowPrimitives);
 

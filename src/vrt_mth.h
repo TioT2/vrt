@@ -139,11 +139,22 @@ namespace vrt
           );
         } /* operator% */
 
-        vec3<component> Normalize( VOID ) const
+        vec3<component> Normalizing( VOID ) const
         {
           component length = std::sqrt(X * X + Y * Y + Z * Z);
 
           return vec3<component>(X / length, Y / length, Z / length);
+        } /* Normalizing */
+
+        vec3<component> Normalize( VOID )
+        {
+          component length = std::sqrt(X * X + Y * Y + Z * Z);
+
+          X /= length;
+          Y /= length;
+          Z /= length;
+
+          return *this;
         } /* Normalize */
 
         VRT_MTH_DEFINE_OPERATOR_PACK_VEC3(+)
@@ -665,7 +676,7 @@ namespace vrt
         {
           Location = NewLocation;
           // orthonormalization
-          Direction = NewDirection.Normalize();
+          Direction = NewDirection.Normalizing();
           Right = (Direction % NewUp).Normalize();
           Up = (Right % Direction).Normalize();
         } /* Set */
