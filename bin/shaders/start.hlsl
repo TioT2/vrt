@@ -5,22 +5,29 @@
 
 float3 RayDirectionFromScreenCoord( float2 ScreenCoord )
 {
-  return normalize(GlobalBuffer.CameraDirection + GlobalBuffer.CameraRight * ScreenCoord.x + GlobalBuffer.CameraUp * ScreenCoord.y);
+  return normalize(GlobalBuffer.CameraDirection * GlobalBuffer.WidthHeightNear.z + GlobalBuffer.CameraRight * ScreenCoord.x + GlobalBuffer.CameraUp * ScreenCoord.y);
 } /* RayDirectionFromTexCoord */
 
 [shader("raygeneration")]
 void rrs_main( void )
 {
   float2 PixelSize = float2(1, 1) / (float2)DispatchRaysDimensions();
-  float2 FragCoord = ((float2)DispatchRaysIndex() + 0.5) * PixelSize;
+  float2 FragCoord = ((float2)DispatchRaysIndex() + 0.5) / (float2)DispatchRaysDimensions();
 
-  // vulkan...
-  FragCoord.y = 1 - FragCoord.y;
-  FragCoord = FragCoord * 2.0 - 1.0;
+  FragCoord = FragCoord * 2.0 - 1.0;            // [0...1] -> [-1...1]
+  FragCoord.y = -FragCoord.y;                   // vulkan...
+  FragCoord *= GlobalBuffer.WidthHeightNear.xy; // aspect
 
   RayDesc Ray;
   Ray.Origin = GlobalBuffer.CameraLocation.xyz;
-  Ray.Direction = RayDirectionFromScreenCoord(FragCoord + float2(Rand(FragCoord.x, GlobalBuffer.FrameIndex * 30.47), Rand(FragCoord.y, GlobalBuffer.FrameIndex * 30.47)) * PixelSize * 6.0);
+
+  float2 FragCoordOffset = float2
+  (
+    Rand(FragCoord.x, GlobalBuffer.FrameIndex * 30.47),
+    Rand(FragCoord.y, GlobalBuffer.FrameIndex * 30.47)
+  ).yx * 2 - 1;
+
+  Ray.Direction = RayDirectionFromScreenCoord(FragCoord + FragCoordOffset * PixelSize * 5.0);
 
   Ray.TMin = 0;
   Ray.TMax = 1024;

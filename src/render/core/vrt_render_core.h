@@ -375,6 +375,9 @@ namespace vrt
         vec3 CameraRight;     // camera right direction
         UINT32 FrameIndex;    // index of current frame (for random)
         vec3 CameraUp;        // camera up direction
+
+        FLOAT _Aligner = 0;
+        vec3 WidthHeightNear; // With, Height, Near planes
       }; /* global_buffer_data */
 
       class kernel : manager<scene, std::string>, manager<material, std::string>, manager<model>, manager<primitive>
@@ -1313,11 +1316,12 @@ namespace vrt
           {
             .CameraLocation = Scene->Camera.Location,
             .LightNumber = (UINT32)Scene->Lights.size(),
-            .CameraDirection = Scene->Camera.Direction * Scene->Camera.Near,
+            .CameraDirection = Scene->Camera.Direction,
             .IsMoved = FALSE,
-            .CameraRight = Scene->Camera.Right * Scene->Camera.Width,
+            .CameraRight = Scene->Camera.Right,
             .FrameIndex = (UINT32)CurrentFrame,
-            .CameraUp = Scene->Camera.Up * Scene->Camera.Height,
+            .CameraUp = Scene->Camera.Up,
+            .WidthHeightNear = vec3(Scene->Camera.Width, Scene->Camera.Height, Scene->Camera.Near),
           };
           Scene->GlobalBuffer.UnmapMemory();
 

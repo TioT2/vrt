@@ -20,6 +20,10 @@ struct buffer_data
   float3 CameraRight;
   uint32_t FrameIndex;
   float3 CameraUp;
+
+  float Aligner;
+
+  float3 WidthHeightNear;
 }; /* buffer_data */
 
 struct point_light
@@ -125,7 +129,7 @@ float3 DirectCos( float3 P, float3 N, float3 ViewDirection, material Material, i
   TraceRay(Scene, 0, ~0, 0, 1, 0, Ray, Payload);
 
   if (!Payload.DoHit)
-    return vec3(0.0);
+    return 0.0;
 
   float3 BRDF = BRDF_CookTorrance(N, ViewDirection, WI, Material);
   float3 Le = float3(1, 1, 1);//evaluate_emissive(i, WI);

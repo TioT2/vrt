@@ -23,7 +23,7 @@ float InvErrorFunction( float X )
 
 float Rand( float N, float Seed = 47 )
 {
-  float T = frac(Seed);
+  float T = frac(cos(Seed));
   float X = NRand(N + 0.07 * T);
 
   return InvErrorFunction(X * 2.0 - 1.0) * 0.15 + 0.5;
